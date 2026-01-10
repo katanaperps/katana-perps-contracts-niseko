@@ -1,0 +1,105 @@
+// SPDX-License-Identifier: MIT
+
+pragma solidity 0.8.25;
+
+import { BalanceTracking } from "./BalanceTracking.sol";
+import { ExchangeEvents } from "./ExchangeEvents.sol";
+import { Funding } from "./Funding.sol";
+import { Hashing } from "./Hashing.sol";
+import { IndexPriceMargin } from "./IndexPriceMargin.sol";
+import { Validations } from "./Validations.sol";
+import { WalletExits } from "./WalletExits.sol";
+import { FundingMultiplierQuartet, Market, MarketOverrides, Transfer, WalletExit } from "./Structs.sol";
+
+library Transferring {
+  using BalanceTracking for BalanceTracking.Storage;
+
+  // solhint-disable-next-line func-name-mixedcase
+  function transfer_delegatecall(
+    // External arguments
+    Transfer memory transfer,
+    // Exchange state values
+    bytes32 domainSeparator,
+    address exitFundWallet,
+    address insuranceFundWallet,
+    address feeWallet,
+    // Exchange state storage refs
+    BalanceTracking.Storage storage balanceTracking,
+    mapping(address => string[]) storage baseAssetSymbolsWithOpenPositionsByWallet,
+    mapping(bytes32 => bool) storage completedTransferHashes,
+    mapping(string => FundingMultiplierQuartet[]) storage fundingMultipliersByBaseAssetSymbol,
+    mapping(string => uint64) storage lastFundingRatePublishTimestampInMsByBaseAssetSymbol,
+    mapping(string => mapping(address => MarketOverrides)) storage marketOverridesByBaseAssetSymbolAndWallet,
+    mapping(string => Market) storage marketsByBaseAssetSymbol,
+    mapping(address => WalletExit) storage walletExits
+  ) public {
+    require(!WalletExits.isWalletExitFinalized(transfer.sourceWallet, walletExits), "Source wallet exited");
+    require(!WalletExits.isWalletExitFinalized(transfer.destinationWallet, walletExits), "Destination wallet exited");
+    require(transfer.sourceWallet != transfer.destinationWallet, "Cannot self-transfer");
+
+    require(transfer.sourceWallet != exitFundWallet, "Cannot transfer from EF");
+    require(transfer.sourceWallet != insuranceFundWallet, "Cannot transfer from IF");
+
+    require(transfer.destinationWallet != address(0x0), "Invalid destination wallet");
+    require(transfer.destinationWallet != exitFundWallet, "Cannot transfer to EF");
+
+    require(Validations.isFeeQuantityValid(transfer.gasFee, transfer.grossQuantity), "Excessive transfer fee");
+    bytes32 transferHash = _validateTransferSignature(transfer, domainSeparator);
+    require(!completedTransferHashes[transferHash], "Duplicate transfer");
+
+    Funding.applyOutstandingWalletFunding(
+      transfer.sourceWallet,
+      balanceTracking,
+      baseAssetSymbolsWithOpenPositionsByWallet,
+      fundingMultipliersByBaseAssetSymbol,
+      lastFundingRatePublishTimestampInMsByBaseAssetSymbol,
+      marketsByBaseAssetSymbol
+    );
+    Funding.applyOutstandingWalletFunding(
+      transfer.destinationWallet,
+      balanceTracking,
+      baseAssetSymbolsWithOpenPositionsByWallet,
+      fundingMultipliersByBaseAssetSymbol,
+      lastFundingRatePublishTimestampInMsByBaseAssetSymbol,
+      marketsByBaseAssetSymbol
+    );
+
+    // Update wallet balances
+    (int64 newDestinationWalletExchangeBalance, int64 newSourceWalletExchangeBalance) = balanceTracking
+      .updateForTransfer(transfer, feeWallet);
+
+    // Wallet must still maintain initial margin requirement after withdrawal
+    IndexPriceMargin.validateInitialMarginRequirement(
+      transfer.sourceWallet,
+      balanceTracking,
+      baseAssetSymbolsWithOpenPositionsByWallet,
+      marketOverridesByBaseAssetSymbolAndWallet,
+      marketsByBaseAssetSymbol
+    );
+
+    // Replay prevention
+    completedTransferHashes[transferHash] = true;
+
+    emit ExchangeEvents.Transferred(
+      transfer.destinationWallet,
+      transfer.sourceWallet,
+      transfer.grossQuantity,
+      newDestinationWalletExchangeBalance,
+      newSourceWalletExchangeBalance
+    );
+  }
+
+  function _validateTransferSignature(
+    Transfer memory transfer,
+    bytes32 domainSeparator
+  ) private pure returns (bytes32) {
+    bytes32 transferHash = Hashing.getTransferHash(transfer);
+
+    require(
+      Hashing.isSignatureValid(domainSeparator, transferHash, transfer.walletSignature, transfer.sourceWallet),
+      "Invalid wallet signature"
+    );
+
+    return transferHash;
+  }
+}

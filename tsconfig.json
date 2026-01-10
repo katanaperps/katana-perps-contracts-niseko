@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "declaration": true,
+    "declarationMap": true,
+    "esModuleInterop": true,
+    "lib": ["es2023", "esnext"],
+    "outDir": "build/",
+    "target": "es2019",
+    "sourceMap": true,
+    "strict": true,
+    "typeRoots": ["./types", "./node_modules/@types"],
+    "types": ["node"],
+  },
+  "include": ["**/*.ts"],
+  "exclude": ["node_modules", "build"],
+  "extends": "./node_modules/@tsconfig/node20/tsconfig.json"
+}

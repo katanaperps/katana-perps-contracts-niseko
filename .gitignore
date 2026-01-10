@@ -1,0 +1,31 @@
+# System fiels
+.DS_Store
+
+# Node files
+build
+node_modules
+
+# Generated types
+typechain-types
+
+# solidity-coverage
+coverage
+coverage.json
+
+# Hardhat files
+cache
+artifacts
+
+# Etherscan verification
+exchangeArguments.js
+governanaceArguments.js
+indexArguments.js
+
+# Yarn
+.yarn/install-state.gz
+
+# Webstorm
+.idea
+
+# Cursor
+.vscode

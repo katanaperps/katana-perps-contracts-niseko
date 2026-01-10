@@ -1,0 +1,163 @@
+// SPDX-License-Identifier: MIT
+
+pragma solidity 0.8.25;
+
+import { ECDSA } from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import { MessageHashUtils } from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
+
+import { Constants } from "./Constants.sol";
+import { String } from "./String.sol";
+import {
+  DelegatedKeyAuthorization,
+  Order,
+  Transfer,
+  Withdrawal,
+  WithdrawalFromManagedAccountByQuantity,
+  WithdrawalFromManagedAccountByShares
+} from "./Structs.sol";
+
+/**
+ * @notice Library helpers for building hashes and verifying wallet signatures
+ */
+library Hashing {
+  function getSigner(
+    bytes32 domainSeparator,
+    bytes32 structHash,
+    bytes memory signature
+  ) internal pure returns (address) {
+    return ECDSA.recover(MessageHashUtils.toTypedDataHash(domainSeparator, structHash), signature);
+  }
+
+  function isSignatureValid(
+    bytes32 domainSeparator,
+    bytes32 structHash,
+    bytes memory signature,
+    address signer
+  ) internal pure returns (bool) {
+    return getSigner(domainSeparator, structHash, signature) == signer;
+  }
+
+  function getDelegatedKeyAuthorizationHash(
+    DelegatedKeyAuthorization memory delegatedKeyAuthorization
+  ) internal pure returns (bytes32) {
+    return
+      keccak256(
+        abi.encode(
+          Constants.EIP_712_TYPE_HASH_DELEGATED_KEY_AUTHORIZATION,
+          delegatedKeyAuthorization.nonce,
+          delegatedKeyAuthorization.delegatedPublicKey,
+          Constants.DELEGATED_KEY_AUTHORIZATION_MESSAGE_HASH
+        )
+      );
+  }
+
+  /**
+   * @dev As a gas optimization, base and quote symbols are passed in separately and combined to
+   * verify the wallet hash, since this is cheaper than splitting the market symbol into its two
+   * constituent asset symbols
+   */
+  function getOrderHash(
+    Order memory order,
+    string memory baseSymbol,
+    string memory quoteSymbol
+  ) internal pure returns (bytes32) {
+    // Placing all the fields in a single `abi.encode` call causes a `stack too deep` error
+    return
+      keccak256(
+        abi.encodePacked(
+          abi.encode(
+            Constants.EIP_712_TYPE_HASH_ORDER,
+            order.nonce,
+            order.wallet,
+            keccak256(abi.encodePacked(baseSymbol, "-", quoteSymbol)),
+            uint8(order.orderType),
+            uint8(order.side),
+            keccak256(bytes(String.pipsToDecimalString(order.quantity))),
+            keccak256(bytes(String.pipsToDecimalString(order.limitPrice)))
+          ),
+          abi.encode(
+            keccak256(bytes(String.pipsToDecimalString(order.triggerPrice))),
+            uint8(order.triggerType),
+            keccak256(bytes(String.pipsToDecimalString(order.callbackRate))),
+            order.conditionalOrderId,
+            order.isReduceOnly,
+            uint8(order.timeInForce),
+            uint8(order.selfTradePrevention),
+            order.isLiquidationAcquisitionOnly,
+            order.delegatedKeyAuthorization.delegatedPublicKey,
+            keccak256(bytes(order.clientOrderId))
+          )
+        )
+      );
+  }
+
+  function getTransferHash(Transfer memory transfer) internal pure returns (bytes32) {
+    return
+      keccak256(
+        abi.encode(
+          Constants.EIP_712_TYPE_HASH_TRANSFER,
+          transfer.nonce,
+          transfer.sourceWallet,
+          transfer.destinationWallet,
+          keccak256(bytes(String.pipsToDecimalString(transfer.grossQuantity)))
+        )
+      );
+  }
+
+  function getWithdrawalHash(Withdrawal memory withdrawal) internal pure returns (bytes32) {
+    return
+      keccak256(
+        abi.encode(
+          Constants.EIP_712_TYPE_HASH_WITHDRAWAL,
+          withdrawal.nonce,
+          withdrawal.wallet,
+          keccak256(bytes(String.pipsToDecimalString(withdrawal.grossQuantity))),
+          keccak256(bytes(String.pipsToDecimalString(withdrawal.maximumGasFee))),
+          withdrawal.bridgeAdapter,
+          keccak256(withdrawal.bridgeAdapterPayload)
+        )
+      );
+  }
+
+  function getWithdrawalFromManagedAccountByQuantityHash(
+    WithdrawalFromManagedAccountByQuantity memory withdrawal
+  ) internal pure returns (bytes32) {
+    return
+      keccak256(
+        abi.encode(
+          Constants.EIP_712_TYPE_HASH_WITHDRAWAL_FROM_MANAGED_ACCOUNT_BY_QUANTITY,
+          withdrawal.nonce,
+          withdrawal.managerWallet,
+          withdrawal.depositorWallet,
+          keccak256(bytes(String.pipsToDecimalString(withdrawal.grossQuantity))),
+          keccak256(bytes(String.pipsToDecimalString(withdrawal.maxShares))),
+          keccak256(bytes(String.pipsToDecimalString(withdrawal.maximumGasFee))),
+          withdrawal.managedAccountProvider,
+          keccak256(withdrawal.managedAccountProviderPayload),
+          withdrawal.bridgeAdapter,
+          keccak256(withdrawal.bridgeAdapterPayload)
+        )
+      );
+  }
+
+  function getWithdrawalFromManagedAccountBySharesHash(
+    WithdrawalFromManagedAccountByShares memory withdrawal
+  ) internal pure returns (bytes32) {
+    return
+      keccak256(
+        abi.encode(
+          Constants.EIP_712_TYPE_HASH_WITHDRAWAL_FROM_MANAGED_ACCOUNT_BY_SHARES,
+          withdrawal.nonce,
+          withdrawal.managerWallet,
+          withdrawal.depositorWallet,
+          keccak256(bytes(String.pipsToDecimalString(withdrawal.shares))),
+          keccak256(bytes(String.pipsToDecimalString(withdrawal.minimumQuantity))),
+          keccak256(bytes(String.pipsToDecimalString(withdrawal.maximumGasFee))),
+          withdrawal.managedAccountProvider,
+          keccak256(withdrawal.managedAccountProviderPayload),
+          withdrawal.bridgeAdapter,
+          keccak256(withdrawal.bridgeAdapterPayload)
+        )
+      );
+  }
+}

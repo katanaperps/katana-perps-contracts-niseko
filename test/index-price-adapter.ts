@@ -1,0 +1,951 @@
+import { DataPackagesWrapper } from '@redstone-finance/evm-connector';
+import * as redstoneSdk from '@redstone-finance/sdk';
+import { ethers, network } from 'hardhat';
+
+import {
+  hardhatChainId,
+  getDomainSeparator,
+  indexPriceToArgumentStruct,
+  decimalToPips,
+} from '../lib';
+
+import {
+  baseAssetSymbol,
+  buildIndexPrice,
+  buildIndexPriceWithTimestamp,
+  buildIndexPriceWithValue,
+  deployContractsExceptCustodian,
+  expect,
+  getLatestBlockTimestampInSeconds,
+} from './helpers';
+
+import type {
+  ExchangeIndexPriceAdapterMock,
+  ExchangeIndexPriceAdapterMock__factory,
+  Exchange_v1,
+  KatanaPerpsIndexAndOraclePriceAdapter,
+  KatanaPerpsIndexAndOraclePriceAdapter__factory,
+  RedStoneIndexPriceAdapter__factory,
+} from '../typechain-types';
+import type { SignerWithAddress } from '@nomicfoundation/hardhat-ethers/signers';
+import type * as redstoneProtocol from '@redstone-finance/protocol';
+
+const redstoneAuthorizedSigners = [
+  '0x8BB8F32Df04c8b654987DAaeD53D6B6091e3B774',
+  '0xdEB22f54738d54976C4c0fe5ce6d408E40d88499',
+  '0x51Ce04Be4b3E32572C4Ec9135221d0691Ba7d202',
+  '0xDD682daEC5A90dD295d14DA4b0bec9281017b5bE',
+  '0x9c5AE89C4Af6aA32cE58588DBaF90d18a855B6de',
+];
+
+describe('KatanaPerpsIndexAndOraclePriceAdapter', function () {
+  let ExchangeIndexPriceAdapterMockFactory: ExchangeIndexPriceAdapterMock__factory;
+  let KatanaPerpsIndexAndOraclePriceAdapterFactory: KatanaPerpsIndexAndOraclePriceAdapter__factory;
+  let indexPriceServiceWallet: SignerWithAddress;
+  let owner: SignerWithAddress;
+
+  before(async () => {
+    await network.provider.send('hardhat_reset');
+    ExchangeIndexPriceAdapterMockFactory = await ethers.getContractFactory(
+      'ExchangeIndexPriceAdapterMock',
+    );
+    KatanaPerpsIndexAndOraclePriceAdapterFactory =
+      await ethers.getContractFactory('KatanaPerpsIndexAndOraclePriceAdapter');
+    indexPriceServiceWallet = (await ethers.getSigners())[5];
+    [owner] = await ethers.getSigners();
+  });
+
+  describe('deploy', async function () {
+    it('should work for valid activator and IPS wallet', async () => {
+      await KatanaPerpsIndexAndOraclePriceAdapterFactory.deploy(owner.address, [
+        indexPriceServiceWallet.address,
+      ]);
+    });
+
+    it('should revert for invalid activator', async () => {
+      await expect(
+        KatanaPerpsIndexAndOraclePriceAdapterFactory.deploy(
+          ethers.ZeroAddress,
+          [indexPriceServiceWallet.address],
+        ),
+      ).to.eventually.be.rejectedWith(/invalid activator/i);
+    });
+
+    it('should revert for missing IPS wallets', async () => {
+      await expect(
+        KatanaPerpsIndexAndOraclePriceAdapterFactory.deploy(owner.address, []),
+      ).to.eventually.be.rejectedWith(/missing IPS wallets/i);
+    });
+
+    it('should revert for invalid IPS wallet', async () => {
+      await expect(
+        KatanaPerpsIndexAndOraclePriceAdapterFactory.deploy(owner.address, [
+          ethers.ZeroAddress,
+        ]),
+      ).to.eventually.be.rejectedWith(/invalid IPS wallet/i);
+    });
+  });
+
+  describe('setActive', async function () {
+    let exchange: Exchange_v1;
+    let indexPriceAdapter: KatanaPerpsIndexAndOraclePriceAdapter;
+    let oldIndexPriceAdapter: KatanaPerpsIndexAndOraclePriceAdapter;
+
+    beforeEach(async () => {
+      const results = await deployContractsExceptCustodian(owner);
+      exchange = results.exchange;
+      oldIndexPriceAdapter = results.indexPriceAdapter;
+
+      indexPriceAdapter =
+        await KatanaPerpsIndexAndOraclePriceAdapterFactory.deploy(
+          owner.address,
+          [indexPriceServiceWallet.address],
+        );
+    });
+
+    it('should work for valid contract address', async () => {
+      await indexPriceAdapter.setActive(await exchange.getAddress());
+
+      await expect(
+        indexPriceAdapter.exchangeDomainSeparator(),
+      ).to.eventually.equal(
+        ethers.TypedDataEncoder.hashDomain(
+          getDomainSeparator(await exchange.getAddress(), hardhatChainId),
+        ),
+      );
+    });
+
+    it('should migrate latest prices', async () => {
+      await exchange.setDispatcher(owner.address);
+      await exchange.addMarket({
+        exists: true,
+        isActive: false,
+        baseAssetSymbol,
+        indexPriceAtDeactivation: 0,
+        lastIndexPrice: 0,
+        lastIndexPriceTimestampInMs: 0,
+        overridableFields: {
+          initialMarginFraction: '5000000',
+          maintenanceMarginFraction: '3000000',
+          incrementalInitialMarginFraction: '1000000',
+          baselinePositionSize: '14000000000',
+          incrementalPositionSize: '2800000000',
+          maximumPositionSize: '282000000000',
+          minimumPositionSize: '10000000',
+        },
+      });
+      await exchange.connect(owner).activateMarket(baseAssetSymbol);
+      await exchange
+        .connect(owner)
+        .publishIndexPrices([
+          indexPriceToArgumentStruct(
+            await oldIndexPriceAdapter.getAddress(),
+            await buildIndexPriceWithValue(
+              await exchange.getAddress(),
+              owner,
+              '1900.00000000',
+            ),
+          ),
+        ]);
+
+      await expect(
+        indexPriceAdapter.loadPriceForBaseAssetSymbol(baseAssetSymbol),
+      ).to.eventually.be.rejectedWith(/missing price/i);
+
+      await indexPriceAdapter.setActive(await exchange.getAddress());
+
+      expect(
+        (
+          await indexPriceAdapter.loadPriceForBaseAssetSymbol(baseAssetSymbol)
+        ).toString(),
+      ).to.equal(decimalToPips('1900.00000000'));
+    });
+
+    it('should revert for invalid await exchange address', async () => {
+      await expect(
+        indexPriceAdapter.setActive(ethers.ZeroAddress),
+      ).to.eventually.be.rejectedWith(/invalid exchange contract address/i);
+    });
+
+    it('should work when called twice', async () => {
+      await indexPriceAdapter.setActive(await exchange.getAddress());
+      await indexPriceAdapter.setActive(await exchange.getAddress());
+    });
+
+    it('should revert when called not called by activator', async () => {
+      await indexPriceAdapter.setActive(await exchange.getAddress());
+
+      await expect(
+        indexPriceAdapter
+          .connect((await ethers.getSigners())[1])
+          .setActive(await exchange.getAddress()),
+      ).to.be.revertedWith(/caller must be activator/i);
+    });
+  });
+
+  describe('loadPriceForBaseAssetSymbol', async function () {
+    let exchangeMock: ExchangeIndexPriceAdapterMock;
+    let indexPriceAdapter: KatanaPerpsIndexAndOraclePriceAdapter;
+
+    beforeEach(async () => {
+      indexPriceAdapter =
+        await KatanaPerpsIndexAndOraclePriceAdapterFactory.deploy(
+          owner.address,
+          [indexPriceServiceWallet.address],
+        );
+      exchangeMock = await ExchangeIndexPriceAdapterMockFactory.deploy(
+        await indexPriceAdapter.getAddress(),
+      );
+      await indexPriceAdapter.setActive(await exchangeMock.getAddress());
+    });
+
+    it('should work when price is in storage', async () => {
+      const indexPrice = await buildIndexPrice(
+        await exchangeMock.getAddress(),
+        indexPriceServiceWallet,
+      );
+
+      await exchangeMock.validateIndexPricePayload(
+        indexPriceToArgumentStruct(
+          await indexPriceAdapter.getAddress(),
+          indexPrice,
+        ).payload,
+      );
+
+      const price = (
+        await indexPriceAdapter.loadPriceForBaseAssetSymbol(baseAssetSymbol)
+      ).toString();
+      expect(price).to.equal(decimalToPips(indexPrice.price));
+    });
+
+    it('should not store outdated price', async () => {
+      const indexPrice = await buildIndexPrice(
+        await exchangeMock.getAddress(),
+        indexPriceServiceWallet,
+      );
+
+      await exchangeMock.validateIndexPricePayload(
+        indexPriceToArgumentStruct(
+          await indexPriceAdapter.getAddress(),
+          indexPrice,
+        ).payload,
+      );
+
+      const indexPrice2 = await buildIndexPriceWithTimestamp(
+        await exchangeMock.getAddress(),
+        indexPriceServiceWallet,
+        (await getLatestBlockTimestampInSeconds()) * 1000 - 10000,
+        baseAssetSymbol,
+        '1234.67890000',
+      );
+      await exchangeMock.validateIndexPricePayload(
+        indexPriceToArgumentStruct(
+          await indexPriceAdapter.getAddress(),
+          indexPrice2,
+        ).payload,
+      );
+
+      const price = (
+        await indexPriceAdapter.loadPriceForBaseAssetSymbol(baseAssetSymbol)
+      ).toString();
+      expect(price).to.equal(decimalToPips(indexPrice.price));
+    });
+
+    it('should revert for missing price', async () => {
+      await expect(
+        indexPriceAdapter.loadPriceForBaseAssetSymbol(baseAssetSymbol),
+      ).to.eventually.be.rejectedWith(/missing price/i);
+    });
+  });
+
+  describe('validateIndexPricePayload', async () => {
+    let indexPriceAdapter: KatanaPerpsIndexAndOraclePriceAdapter;
+
+    beforeEach(async () => {
+      indexPriceAdapter =
+        await KatanaPerpsIndexAndOraclePriceAdapterFactory.deploy(
+          owner.address,
+          [indexPriceServiceWallet.address],
+        );
+    });
+
+    it('should revert when not called by exchange', async () => {
+      await expect(
+        indexPriceAdapter.validateIndexPricePayload('0x00'),
+      ).to.eventually.be.rejectedWith(/exchange not set/i);
+
+      const { exchange } = await deployContractsExceptCustodian(owner);
+      await indexPriceAdapter.setActive(await exchange.getAddress());
+      await expect(
+        indexPriceAdapter.validateIndexPricePayload('0x00'),
+      ).to.eventually.be.rejectedWith(/caller must be exchange/i);
+    });
+
+    it('should revert when price is zero', async () => {
+      const exchangeMock = await ExchangeIndexPriceAdapterMockFactory.deploy(
+        await indexPriceAdapter.getAddress(),
+      );
+      await indexPriceAdapter.setActive(await exchangeMock.getAddress());
+
+      await expect(
+        exchangeMock.validateIndexPricePayload(
+          indexPriceToArgumentStruct(
+            await indexPriceAdapter.getAddress(),
+            await buildIndexPriceWithTimestamp(
+              await exchangeMock.getAddress(),
+              indexPriceServiceWallet,
+              (await getLatestBlockTimestampInSeconds()) * 1000 - 10000,
+              baseAssetSymbol,
+              '0.00000000',
+            ),
+          ).payload,
+        ),
+      ).to.eventually.be.rejectedWith(/unexpected non-positive price/i);
+    });
+  });
+
+  describe('validateInitialIndexPricePayloadAdmin', async () => {
+    let exchange: Exchange_v1;
+    let indexPriceAdapter: KatanaPerpsIndexAndOraclePriceAdapter;
+
+    beforeEach(async () => {
+      indexPriceAdapter =
+        await KatanaPerpsIndexAndOraclePriceAdapterFactory.deploy(
+          owner.address,
+          [indexPriceServiceWallet.address],
+        );
+      exchange = (
+        await deployContractsExceptCustodian(
+          owner,
+          owner,
+          owner,
+          indexPriceServiceWallet,
+        )
+      ).exchange;
+    });
+
+    it('should work when no price yet exists', async () => {
+      await indexPriceAdapter.setActive(await exchange.getAddress());
+
+      await expect(
+        indexPriceAdapter.loadPriceForBaseAssetSymbol(baseAssetSymbol),
+      ).to.eventually.be.rejectedWith(/missing price/i);
+
+      await indexPriceAdapter.validateInitialIndexPricePayloadAdmin(
+        indexPriceToArgumentStruct(
+          await indexPriceAdapter.getAddress(),
+          await buildIndexPriceWithValue(
+            await exchange.getAddress(),
+            indexPriceServiceWallet,
+            '1900.00000000',
+          ),
+        ).payload,
+      );
+
+      expect(
+        (
+          await indexPriceAdapter.loadPriceForBaseAssetSymbol(baseAssetSymbol)
+        ).toString(),
+      ).to.equal(decimalToPips('1900.00000000'));
+    });
+
+    it('should revert when price is zero', async () => {
+      const exchangeMock = await ExchangeIndexPriceAdapterMockFactory.deploy(
+        await indexPriceAdapter.getAddress(),
+      );
+      await indexPriceAdapter.setActive(await exchangeMock.getAddress());
+
+      await expect(
+        indexPriceAdapter.validateInitialIndexPricePayloadAdmin(
+          indexPriceToArgumentStruct(
+            await indexPriceAdapter.getAddress(),
+            await buildIndexPriceWithTimestamp(
+              await exchangeMock.getAddress(),
+              indexPriceServiceWallet,
+              (await getLatestBlockTimestampInSeconds()) * 1000 - 10000,
+              baseAssetSymbol,
+              '0.00000000',
+            ),
+          ).payload,
+        ),
+      ).to.eventually.be.rejectedWith(/unexpected non-positive price/i);
+    });
+
+    it('should revert when not sent by admin', async () => {
+      await expect(
+        indexPriceAdapter
+          .connect((await ethers.getSigners())[8])
+          .validateInitialIndexPricePayloadAdmin(
+            indexPriceToArgumentStruct(
+              await indexPriceAdapter.getAddress(),
+              await buildIndexPriceWithValue(
+                await exchange.getAddress(),
+                indexPriceServiceWallet,
+                '1900.00000000',
+              ),
+            ).payload,
+          ),
+      ).to.be.revertedWithCustomError(indexPriceAdapter, 'SenderMustBeAdmin');
+    });
+
+    it('should revert when exchange is not set', async () => {
+      await expect(
+        indexPriceAdapter.validateInitialIndexPricePayloadAdmin(
+          indexPriceToArgumentStruct(
+            await indexPriceAdapter.getAddress(),
+            await buildIndexPriceWithValue(
+              await exchange.getAddress(),
+              indexPriceServiceWallet,
+              '1900.00000000',
+            ),
+          ).payload,
+        ),
+      ).to.eventually.be.rejectedWith(/exchange not set/i);
+    });
+
+    it('should revert when price already exists', async () => {
+      await indexPriceAdapter.setActive(await exchange.getAddress());
+
+      await indexPriceAdapter.validateInitialIndexPricePayloadAdmin(
+        indexPriceToArgumentStruct(
+          await indexPriceAdapter.getAddress(),
+          await buildIndexPriceWithValue(
+            await exchange.getAddress(),
+            indexPriceServiceWallet,
+            '1900.00000000',
+          ),
+        ).payload,
+      );
+
+      await expect(
+        indexPriceAdapter.validateInitialIndexPricePayloadAdmin(
+          indexPriceToArgumentStruct(
+            await indexPriceAdapter.getAddress(),
+            await buildIndexPriceWithValue(
+              await exchange.getAddress(),
+              indexPriceServiceWallet,
+              '1900.00000000',
+            ),
+          ).payload,
+        ),
+      ).to.eventually.be.rejectedWith(/price already exists for market/i);
+    });
+  });
+});
+
+describe('RedStoneIndexPriceAdapter', function () {
+  let RedStoneIndexPriceAdapterFactory: RedStoneIndexPriceAdapter__factory;
+  let owner: SignerWithAddress;
+
+  before(async () => {
+    await network.provider.send('hardhat_reset');
+    RedStoneIndexPriceAdapterFactory = await ethers.getContractFactory(
+      'RedStoneIndexPriceAdapter',
+    );
+    [owner] = await ethers.getSigners();
+  });
+
+  describe('deploy', async function () {
+    it('should work for valid activator and single market with price multiplier of 1', async () => {
+      const dataFeedId = ethers.encodeBytes32String('ETH');
+
+      await RedStoneIndexPriceAdapterFactory.deploy(
+        owner.address,
+        [baseAssetSymbol],
+        [dataFeedId],
+        [1],
+      );
+    });
+
+    it('should work for valid activator and multiple markets', async () => {
+      const dataFeedId1 = ethers.encodeBytes32String('ETH');
+      const dataFeedId2 = ethers.encodeBytes32String('BTC');
+
+      await RedStoneIndexPriceAdapterFactory.deploy(
+        owner.address,
+        [baseAssetSymbol, 'BTC'],
+        [dataFeedId1, dataFeedId2],
+        [1, 1],
+      );
+    });
+
+    it('should work for valid activator and market with price multiplier greater than 1', async () => {
+      const dataFeedId = ethers.encodeBytes32String('ETH');
+      // Base asset symbol must start with the price multiplier as a string
+      const baseAssetSymbolWithMultiplier = '1000ETH';
+
+      await RedStoneIndexPriceAdapterFactory.deploy(
+        owner.address,
+        [baseAssetSymbolWithMultiplier],
+        [dataFeedId],
+        [1000],
+      );
+    });
+
+    it('should work with empty markets array', async () => {
+      await RedStoneIndexPriceAdapterFactory.deploy(owner.address, [], [], []);
+    });
+
+    it('should revert for invalid activator address', async () => {
+      const dataFeedId = ethers.encodeBytes32String('ETH');
+
+      await expect(
+        RedStoneIndexPriceAdapterFactory.deploy(
+          ethers.ZeroAddress,
+          [baseAssetSymbol],
+          [dataFeedId],
+          [1],
+        ),
+      ).to.eventually.be.rejectedWith(/invalid activator address/i);
+    });
+
+    it('should revert for argument length mismatch between baseAssetSymbols and dataFeedIds', async () => {
+      const dataFeedId1 = ethers.encodeBytes32String('ETH');
+      const dataFeedId2 = ethers.encodeBytes32String('BTC');
+
+      await expect(
+        RedStoneIndexPriceAdapterFactory.deploy(
+          owner.address,
+          [baseAssetSymbol],
+          [dataFeedId1, dataFeedId2],
+          [1],
+        ),
+      ).to.eventually.be.rejectedWith(/argument length mismatch/i);
+    });
+
+    it('should revert for argument length mismatch between dataFeedIds and priceMultipliers', async () => {
+      const dataFeedId = ethers.encodeBytes32String('ETH');
+
+      await expect(
+        RedStoneIndexPriceAdapterFactory.deploy(
+          owner.address,
+          [baseAssetSymbol],
+          [dataFeedId],
+          [1, 2],
+        ),
+      ).to.eventually.be.rejectedWith(/argument length mismatch/i);
+    });
+
+    it('should revert for invalid data feed ID (zero bytes32)', async () => {
+      await expect(
+        RedStoneIndexPriceAdapterFactory.deploy(
+          owner.address,
+          [baseAssetSymbol],
+          [ethers.ZeroHash],
+          [1],
+        ),
+      ).to.eventually.be.rejectedWith(/invalid data feed id/i);
+    });
+
+    it('should revert for invalid base asset symbol (empty string)', async () => {
+      const dataFeedId = ethers.encodeBytes32String('ETH');
+
+      await expect(
+        RedStoneIndexPriceAdapterFactory.deploy(
+          owner.address,
+          [''],
+          [dataFeedId],
+          [1],
+        ),
+      ).to.eventually.be.rejectedWith(/invalid base asset symbol/i);
+    });
+
+    it('should revert for invalid price multiplier (zero)', async () => {
+      const dataFeedId = ethers.encodeBytes32String('ETH');
+
+      await expect(
+        RedStoneIndexPriceAdapterFactory.deploy(
+          owner.address,
+          [baseAssetSymbol],
+          [dataFeedId],
+          [0],
+        ),
+      ).to.eventually.be.rejectedWith(/invalid price multiplier/i);
+    });
+
+    it('should revert when price multiplier > 1 but base asset symbol does not start with multiplier', async () => {
+      const dataFeedId = ethers.encodeBytes32String('ETH');
+
+      await expect(
+        RedStoneIndexPriceAdapterFactory.deploy(
+          owner.address,
+          [baseAssetSymbol], // 'ETH' does not start with '1000'
+          [dataFeedId],
+          [1000],
+        ),
+      ).to.eventually.be.rejectedWith(
+        /base asset symbol does not start with price multiplier/i,
+      );
+    });
+
+    it('should revert for duplicate data feed ID', async () => {
+      const dataFeedId = ethers.encodeBytes32String('ETH');
+
+      await expect(
+        RedStoneIndexPriceAdapterFactory.deploy(
+          owner.address,
+          [baseAssetSymbol, 'ETH2'],
+          [dataFeedId, dataFeedId], // Same data feed ID
+          [1, 1],
+        ),
+      ).to.eventually.be.rejectedWith(/already added data feed id/i);
+    });
+
+    it('should revert for duplicate base asset symbol', async () => {
+      const dataFeedId1 = ethers.encodeBytes32String('ETH');
+      const dataFeedId2 = ethers.encodeBytes32String('BTC');
+
+      await expect(
+        RedStoneIndexPriceAdapterFactory.deploy(
+          owner.address,
+          [baseAssetSymbol, baseAssetSymbol], // Same base asset symbol
+          [dataFeedId1, dataFeedId2],
+          [1, 1],
+        ),
+      ).to.eventually.be.rejectedWith(/already added base asset symbol/i);
+    });
+  });
+
+  describe('validateIndexPricePayload', async function () {
+    const ethDataFeedId = ethers.encodeBytes32String(baseAssetSymbol);
+    let ExchangeIndexPriceAdapterMockFactory: ExchangeIndexPriceAdapterMock__factory;
+    let samplePayload: string;
+    let samplePayloadTimestamp: number;
+    let samplePayloadPrice: bigint;
+
+    before(async () => {
+      RedStoneIndexPriceAdapterFactory = await ethers.getContractFactory(
+        'RedStoneIndexPriceAdapter',
+      );
+      ExchangeIndexPriceAdapterMockFactory = await ethers.getContractFactory(
+        'ExchangeIndexPriceAdapterMock',
+      );
+      [owner] = await ethers.getSigners();
+
+      // https://github.com/redstone-finance/redstone-oracles-monorepo/blob/3aff529/packages/evm-connector/contracts/data-services/PrimaryProdDataServiceConsumerBase.sol
+      const dataPackages = await redstoneSdk.requestDataPackages({
+        dataServiceId: 'redstone-primary-prod',
+        dataPackagesIds: [baseAssetSymbol],
+        uniqueSignersCount: 3,
+        authorizedSigners: redstoneAuthorizedSigners,
+      });
+      // Building a payload for manual usage based on fetched data packages
+      const wrapper = new DataPackagesWrapper(dataPackages);
+      const redstonePayload = `0x${await wrapper.prepareRedstonePayload(true)}`;
+
+      samplePayload = ethers.AbiCoder.defaultAbiCoder().encode(
+        ['bytes32', 'bytes'],
+        [ethDataFeedId, redstonePayload],
+      );
+
+      const ethPackages = dataPackages[baseAssetSymbol];
+      if (!ethPackages) {
+        throw new Error(`Missing index ${baseAssetSymbol} in dataPackages`);
+      }
+      samplePayloadTimestamp = ethPackages[0].toObj().timestampMilliseconds;
+
+      // Note: This assumes that al packages have the same price
+      samplePayloadPrice = ethers.toBigInt(
+        ethPackages[0].dataPackage.dataPoints[0].value,
+      );
+      /*
+      Timestamp and price can also be extracted from the prepared contract
+      payload:
+
+      const parsed = new RedstonePayloadParser(
+        ethers.getBytes(redstonePayload),
+      ).parse();
+      samplePayloadTimestamp =
+        parsed.signedDataPackages[0].toObj().timestampMilliseconds;
+      samplePayloadPrice = ethers.toBigInt(
+        parsed.signedDataPackages[0].dataPackage.dataPoints[0].value,
+      );
+      */
+    });
+
+    it('should revert when exchange is not set', async () => {
+      const indexPriceAdapter = await RedStoneIndexPriceAdapterFactory.deploy(
+        owner.address,
+        [baseAssetSymbol],
+        [ethDataFeedId],
+        [1],
+      );
+
+      // Call directly without setting exchange
+      await expect(
+        indexPriceAdapter.validateIndexPricePayload(samplePayload),
+      ).to.eventually.be.rejectedWith(/caller must be exchange contract/i);
+    });
+
+    it('should revert when caller is not the exchange', async () => {
+      const indexPriceAdapter = await RedStoneIndexPriceAdapterFactory.deploy(
+        owner.address,
+        [baseAssetSymbol],
+        [ethDataFeedId],
+        [1],
+      );
+
+      // Create a mock exchange and set it as active
+      const exchangeMock = await ExchangeIndexPriceAdapterMockFactory.deploy(
+        await indexPriceAdapter.getAddress(),
+      );
+      await indexPriceAdapter.setActive(await exchangeMock.getAddress());
+
+      // Try to call directly (not through exchange)
+      await expect(
+        indexPriceAdapter.validateIndexPricePayload(samplePayload),
+      ).to.eventually.be.rejectedWith(/caller must be exchange contract/i);
+    });
+
+    it('should revert for unknown price ID', async () => {
+      const indexPriceAdapter = await RedStoneIndexPriceAdapterFactory.deploy(
+        owner.address,
+        [], // No markets added
+        [],
+        [],
+      );
+
+      const exchangeMock = await ExchangeIndexPriceAdapterMockFactory.deploy(
+        await indexPriceAdapter.getAddress(),
+      );
+      await indexPriceAdapter.setActive(await exchangeMock.getAddress());
+
+      // The payload contains ETH data feed ID but no markets are added
+      await expect(
+        exchangeMock.validateIndexPricePayload(samplePayload),
+      ).to.eventually.be.rejectedWith(/unknown price id/i);
+    });
+
+    it('should revert for unknown price ID when different market is configured', async () => {
+      const btcDataFeedId = ethers.encodeBytes32String('BTC');
+
+      const indexPriceAdapter = await RedStoneIndexPriceAdapterFactory.deploy(
+        owner.address,
+        ['BTC'], // Only BTC configured, not ETH
+        [btcDataFeedId],
+        [1],
+      );
+
+      const exchangeMock = await ExchangeIndexPriceAdapterMockFactory.deploy(
+        await indexPriceAdapter.getAddress(),
+      );
+      await indexPriceAdapter.setActive(await exchangeMock.getAddress());
+
+      // The payload contains ETH data feed ID but only BTC is configured
+      await expect(
+        exchangeMock.validateIndexPricePayload(samplePayload),
+      ).to.eventually.be.rejectedWith(/unknown price id/i);
+    });
+
+    it('should return IndexPrice with correct values for valid input', async () => {
+      const indexPriceAdapter = await RedStoneIndexPriceAdapterFactory.deploy(
+        owner.address,
+        [baseAssetSymbol],
+        [ethDataFeedId],
+        [1],
+      );
+
+      const exchangeMock = await ExchangeIndexPriceAdapterMockFactory.deploy(
+        await indexPriceAdapter.getAddress(),
+      );
+      await indexPriceAdapter.setActive(await exchangeMock.getAddress());
+
+      // Call validateIndexPricePayload through the mock exchange
+      const tx = await exchangeMock.validateIndexPricePayload(samplePayload);
+      const receipt = await tx.wait();
+
+      // Get the ValidatedIndexPrice event
+      const event = receipt?.logs.find((log) => {
+        try {
+          return (
+            exchangeMock.interface.parseLog(log)?.name === 'ValidatedIndexPrice'
+          );
+        } catch {
+          return false;
+        }
+      });
+
+      expect(event).to.not.be.undefined;
+
+      const parsedEvent = exchangeMock.interface.parseLog(event!);
+      const indexPrice = parsedEvent?.args?.indexPrice;
+
+      // Verify the IndexPrice struct fields
+      // baseAssetSymbol should be 'ETH'
+      expect(indexPrice.baseAssetSymbol).to.equal(baseAssetSymbol);
+      expect(indexPrice.price).to.equal(samplePayloadPrice);
+      expect(indexPrice.timestampInMs).to.equal(samplePayloadTimestamp);
+    });
+
+    it('should return IndexPrice with price multiplied by priceMultiplier for 10ETH market', async () => {
+      const multipliedBaseAssetSymbol = '10ETH';
+      const priceMultiplier = 10;
+
+      const indexPriceAdapter = await RedStoneIndexPriceAdapterFactory.deploy(
+        owner.address,
+        [multipliedBaseAssetSymbol],
+        [ethDataFeedId],
+        [priceMultiplier],
+      );
+
+      const exchangeMock = await ExchangeIndexPriceAdapterMockFactory.deploy(
+        await indexPriceAdapter.getAddress(),
+      );
+      await indexPriceAdapter.setActive(await exchangeMock.getAddress());
+
+      // Call validateIndexPricePayload through the mock exchange
+      const tx = await exchangeMock.validateIndexPricePayload(samplePayload);
+      const receipt = await tx.wait();
+
+      // Get the ValidatedIndexPrice event
+      const event = receipt?.logs.find((log) => {
+        try {
+          return (
+            exchangeMock.interface.parseLog(log)?.name === 'ValidatedIndexPrice'
+          );
+        } catch {
+          return false;
+        }
+      });
+
+      expect(event).to.not.be.undefined;
+
+      const parsedEvent = exchangeMock.interface.parseLog(event!);
+      const indexPrice = parsedEvent?.args?.indexPrice;
+
+      // Verify the IndexPrice struct fields
+      // baseAssetSymbol should be '10ETH'
+      expect(indexPrice.baseAssetSymbol).to.equal(multipliedBaseAssetSymbol);
+
+      // price should be exactly 10x the payload-encoded price
+      expect(indexPrice.price).to.equal(
+        samplePayloadPrice * BigInt(priceMultiplier),
+      );
+
+      expect(indexPrice.timestampInMs).to.equal(samplePayloadTimestamp);
+    });
+
+    /**
+     * Based on https://github.com/redstone-finance/redstone-oracles-monorepo/blob/44b06f892864f36c9d3676c0694641e3e92f77b9/packages/sdk/src/data-feed-values.ts#L40-L44
+     * Returns the price as a float.
+     */
+    const determinePriceFromDataPackages = (
+      dataPackages: redstoneProtocol.SignedDataPackage[],
+    ): number => {
+      const prices = dataPackages.map((dataPackage) =>
+        Number(dataPackage.dataPackage.dataPoints[0].toObj().value),
+      );
+      return redstoneSdk.aggregateValues(prices, 'median');
+    };
+
+    /**
+     * Generates the payload that needs to be provided to the
+     * `validateIndexPricePayload` Exchange contract function for validation
+     * of Redstone index price data.
+     */
+    const generateValidateIndexPricePayload = async (
+      assetSymbol: string,
+      dataPackages: redstoneProtocol.SignedDataPackage[],
+    ) => {
+      const wrapper = new DataPackagesWrapper({ [assetSymbol]: dataPackages });
+      return ethers.AbiCoder.defaultAbiCoder().encode(
+        ['bytes32', 'bytes'],
+        [
+          ethers.encodeBytes32String(assetSymbol),
+          `0x${await wrapper.prepareRedstonePayload(true)}`,
+        ],
+      );
+    };
+
+    /**
+     * Requests prices for multiple assets from the Redstone REST API, and
+     * validates each price individually against the contracts. This mirrors
+     * the end-to-end integration that involves Index Price Selection Service,
+     * persistence, dispatch, and index price validation by the contracts.
+     */
+    it('should succeed for multiple assets', async () => {
+      const assets = ['BTC', 'ETH'];
+
+      const indexPriceAdapter = await RedStoneIndexPriceAdapterFactory.deploy(
+        owner.address,
+        assets,
+        assets.map(ethers.encodeBytes32String),
+        assets.map((_) => 1),
+      );
+      const exchangeMock = await ExchangeIndexPriceAdapterMockFactory.deploy(
+        await indexPriceAdapter.getAddress(),
+      );
+      await indexPriceAdapter.setActive(await exchangeMock.getAddress());
+
+      const validateIndexPricePayload = async (payload: string) => {
+        const tx = await exchangeMock.validateIndexPricePayload(payload);
+        const receipt = await tx.wait();
+        if (!receipt) {
+          throw new Error(`receipt is null`);
+        }
+        const logDecscriptions = receipt.logs
+          .map((log) => exchangeMock.interface.parseLog(log))
+          .filter((logDescription) => logDescription !== null)
+          .filter(
+            (logDescription) => logDescription.name === 'ValidatedIndexPrice',
+          );
+
+        if (logDecscriptions.length !== 1) {
+          throw new Error(
+            `Expected 1 LogDescription, got ${logDecscriptions.length}`,
+          );
+        }
+        const price = logDecscriptions[0].args[0] as unknown as [
+          assetSymbol: string,
+          timestampInMs: bigint,
+          priceInPips: bigint,
+        ];
+        return {
+          baseAssetSymbol: price[0],
+          timestampInMs: price[1],
+          price: price[2],
+        };
+      };
+
+      const dataPackagesByAssetSymbol = await redstoneSdk.requestDataPackages({
+        dataServiceId: 'redstone-primary-prod',
+        dataPackagesIds: assets,
+        uniqueSignersCount: 3,
+        authorizedSigners: redstoneAuthorizedSigners,
+      });
+
+      for (const [assetSymbol, dataPackages] of Object.entries(
+        dataPackagesByAssetSymbol,
+      )) {
+        if (!dataPackages || dataPackages.length === 0) {
+          throw new Error(
+            `No dataPackages were returned for asset ${assetSymbol}`,
+          );
+        }
+        // All packages are expected to have the same timestamp
+        const timestamp = dataPackages[0].toObj().timestampMilliseconds;
+        const price = determinePriceFromDataPackages(dataPackages);
+
+        const payload = await generateValidateIndexPricePayload(
+          assetSymbol,
+          dataPackages,
+        );
+        const validatedPrice = await validateIndexPricePayload(payload);
+
+        // console.log(assetSymbol, {
+        //   numberOfDataPackages: dataPackages.length,
+        //   timestamp,
+        //   price,
+        //   validatedPrice,
+        //   payload,
+        // });
+
+        expect(validatedPrice.baseAssetSymbol).to.eql(assetSymbol);
+        expect(validatedPrice.price.toString()).to.eql(
+          decimalToPips(price.toString(10)),
+        );
+        expect(validatedPrice.timestampInMs).to.eql(BigInt(timestamp));
+      }
+    });
+  });
+});

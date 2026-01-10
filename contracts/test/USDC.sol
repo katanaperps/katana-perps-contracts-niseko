@@ -1,0 +1,64 @@
+// SPDX-License-Identifier: MIT
+
+pragma solidity 0.8.25;
+
+import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+
+// solhint-disable-next-line contract-name-capwords
+contract USDC is ERC20 {
+  uint256 public constant INITIAL_SUPPLY = 10 ** 32;
+
+  uint256 public constant MAX_SUPPLY = 10 ** 35;
+
+  uint256 public constant NUM_TOKENS_RELEASED_BY_FAUCET = 10 ** 9;
+
+  uint256 public fee;
+
+  bool public isTransferDisabled;
+
+  constructor() ERC20("USD Coin", "USDC") {
+    _mint(msg.sender, INITIAL_SUPPLY);
+  }
+
+  function decimals() public view virtual override returns (uint8) {
+    return 6;
+  }
+
+  function faucet(address wallet) public {
+    _mint(wallet, NUM_TOKENS_RELEASED_BY_FAUCET);
+  }
+
+  function mint(address account, uint256 amount) public {
+    _mint(account, amount);
+  }
+
+  function burn(address account, uint256 amount) public {
+    _burn(account, amount);
+  }
+
+  function setIsTransferDisabled(bool isTransferDisabled_) public {
+    isTransferDisabled = isTransferDisabled_;
+  }
+
+  function setFee(uint256 fee_) public {
+    fee = fee_;
+  }
+
+  function transfer(address recipient, uint256 amount) public virtual override returns (bool) {
+    if (isTransferDisabled) {
+      return false;
+    }
+
+    _transfer(_msgSender(), recipient, amount - fee);
+
+    return true;
+  }
+
+  function transferFrom(address sender, address recipient, uint256 amount) public virtual override returns (bool) {
+    address spender = _msgSender();
+    _spendAllowance(sender, spender, amount);
+    _transfer(sender, recipient, amount - fee);
+
+    return true;
+  }
+}
