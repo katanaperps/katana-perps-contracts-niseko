@@ -215,7 +215,7 @@ const config = tseslint.config(
           },
           pathGroups: [
             {
-              pattern: '@kumabid/**',
+              pattern: '@katanaperps/**',
               group: 'internal',
               position: 'before',
             },

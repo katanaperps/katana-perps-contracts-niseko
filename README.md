@@ -1,5 +1,5 @@
 <!-- markdownlint-disable MD033 -->
-# <img src="assets/kuma-logo.png" alt="Katana Perps" height="37px" valign="top"> Niseko Smart Contracts
+# <img src="assets/katana-perps-logo.png" alt="Katana Perps" height="37px" valign="top"> Niseko Smart Contracts
 
 ![Tests](./assets/tests.svg)
 ![Lines](./assets/coverage-lines.svg)
@@ -9,7 +9,7 @@
 
 ## Overview
 
-This repo collects source code, tests, and documentation for the primary [Katana Perps](https://kuma.bid) Solidity contracts.
+This repo collects source code, tests, and documentation for the primary [Katana Perps](https://perps.katana.network) Solidity contracts.
 
 ## Usage
 
@@ -426,7 +426,7 @@ In Niseko, all fees are denominated in USD and are credited or debited from wall
 
 <!-- ## Bug Bounty -->
 
-<!-- The smart contracts in this repo are covered by a [bug bounty via Immunefi](https://www.immunefi.com/bounty/kuma). -->
+<!-- The smart contracts in this repo are covered by a [bug bounty via Immunefi](https://www.immunefi.com/bounty/katanaperps). -->
 
 ## License
 

@@ -1,9 +1,9 @@
 {
-  "name": "@kumabid/katana-perps-contracts-ma",
+  "name": "@katanaperps/katana-perps-contracts-niseko",
   "version": "1.0.0",
-  "description": "Collects source code, tests, and documentation for the Katana Perps MA release Solidity contracts",
-  "homepage": "https://github.com/kumabid/katana-perps-contracts-ma",
-  "repository": "https://github.com/kumabid/katana-perps-contracts-ma",
+  "description": "Collects source code, tests, and documentation for the Katana Perps Niseko release Solidity contracts",
+  "homepage": "https://github.com/katanaperps/katana-perps-contracts-niseko",
+  "repository": "https://github.com/katanaperps/katana-perps-contracts-niseko",
   "license": "MIT",
   "packageManager": "yarn@4.2.1",
   "main": "build/lib/index.js",
