@@ -1742,7 +1742,7 @@ describe('ChainlinkDataStreamsIndexPriceAdapter', function () {
 
       // Verify the IndexPrice struct fields
       expect(indexPrice.baseAssetSymbol).to.equal(baseAssetSymbol);
-      expect(indexPrice.timestampInMs).to.equal(validFromTimestamp);
+      expect(indexPrice.timestampInMs).to.equal(validFromTimestamp * 1000);
       expect(indexPrice.price).to.equal(priceInDecimals);
     });
 

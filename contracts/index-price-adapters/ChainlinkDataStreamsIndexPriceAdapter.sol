@@ -195,7 +195,7 @@ contract ChainlinkDataStreamsIndexPriceAdapter is IIndexPriceAdapter, Owned {
     return
       IndexPrice({
         baseAssetSymbol: market.baseAssetSymbol,
-        timestampInMs: SafeCast.toUint64(report.validFromTimestamp),
+        timestampInMs: SafeCast.toUint64(report.validFromTimestamp) * 1000,
         price: priceInPips
       });
   }
