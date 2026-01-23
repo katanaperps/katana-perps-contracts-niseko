@@ -55,7 +55,12 @@ library SortedStringSet {
       if (String.isEqual(array[i], element)) {
         indexFound = true;
       }
-      result[i] = indexFound ? array[i + 1] : array[i];
+
+      if (indexFound) {
+        result[i] = array[i + 1];
+      } else {
+        result[i] = array[i];
+      }
     }
 
     require(indexFound || String.isEqual(array[array.length - 1], element), "Element to remove not found");
