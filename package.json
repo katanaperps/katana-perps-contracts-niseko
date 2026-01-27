@@ -1,6 +1,6 @@
 {
   "name": "@katanaperps/katana-perps-contracts-niseko",
-  "version": "1.0.0-feat/layer-zero-bridge-adapter.1",
+  "version": "1.0.0-layer-zero-bridge-adapter.1",
   "description": "Collects source code, tests, and documentation for the Katana Perps Niseko release Solidity contracts",
   "homepage": "https://github.com/katanaperps/katana-perps-contracts-niseko",
   "repository": "https://github.com/katanaperps/katana-perps-contracts-niseko",
