@@ -11,6 +11,7 @@ import { IOFT, MessagingFee, SendParam } from "@layerzerolabs/lz-evm-oapp-v2/con
 
 import { Address } from "../libraries/Address.sol";
 import { BridgeAdapterEvents } from "./libraries/BridgeAdapterEvents.sol";
+import { Constants } from "../libraries/Constants.sol";
 import { ExchangeAdapterComposing_v1 } from "./libraries/ExchangeAdapterComposing_v1.sol";
 import { IExchange } from "../libraries/Interfaces.sol";
 import { KatanaPerpsStargateForwarderComposing_v1 } from "./libraries/KatanaPerpsStargateForwarderComposing_v1.sol";
@@ -52,9 +53,6 @@ contract ExchangeLayerZeroAdapter_v1 is BridgeAdapterEvents, ILayerZeroComposer,
 
   uint64 public constant MAX_MINIMUM_WITHDRAW_QUANTITY_MULTIPLIER = 100_000_000; // 100%
   uint64 public constant MIN_MINIMUM_WITHDRAW_QUANTITY_MULTIPLIER = 90_000_000; // 90%
-  // To convert integer pips to a fractional price shift decimal left by the pip precision of 8
-  // decimals places
-  uint64 public constant PIP_PRICE_MULTIPLIER = 10 ** 8;
 
   modifier onlyExchangeOrManagedAccountProvider() {
     bool senderIsExchangeOrManagedAccountProvider = msg.sender == address(exchange);
@@ -349,7 +347,7 @@ contract ExchangeLayerZeroAdapter_v1 is BridgeAdapterEvents, ILayerZeroComposer,
           dstEid: ethereumEndpointId,
           to: OFTComposeMsgCodec.addressToBytes32(depositorWallet),
           amountLD: quantityInAssetUnits,
-          minAmountLD: (quantityInAssetUnits * minimumWithdrawQuantityMultiplier) / PIP_PRICE_MULTIPLIER,
+          minAmountLD: (quantityInAssetUnits * minimumWithdrawQuantityMultiplier) / Constants.PIP_PRICE_MULTIPLIER,
           extraOptions: bytes(""), // No extra native asset needed
           composeMsg: bytes(""), // Compose not supported for withdrawals
           oftCmd: bytes("") // Taxi mode
@@ -362,7 +360,7 @@ contract ExchangeLayerZeroAdapter_v1 is BridgeAdapterEvents, ILayerZeroComposer,
         dstEid: ethereumEndpointId,
         to: OFTComposeMsgCodec.addressToBytes32(stargateForwarder),
         amountLD: quantityInAssetUnits,
-        minAmountLD: (quantityInAssetUnits * minimumWithdrawQuantityMultiplier) / PIP_PRICE_MULTIPLIER,
+        minAmountLD: (quantityInAssetUnits * minimumWithdrawQuantityMultiplier) / Constants.PIP_PRICE_MULTIPLIER,
         extraOptions: bytes(""), // No extra native asset needed
         composeMsg: abi.encode(
           KatanaPerpsStargateForwarderComposing_v1.ComposeMessageType.WithdrawFromKatana,

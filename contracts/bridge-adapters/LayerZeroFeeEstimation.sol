@@ -10,11 +10,9 @@ import {
   SendParam
 } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oft/interfaces/IOFT.sol";
 
-library LayerZeroFeeEstimation {
-  // To convert integer pips to a fractional price shift decimal left by the pip precision of 8
-  // decimals places
-  uint64 public constant PIP_PRICE_MULTIPLIER = 10 ** 8;
+import { Constants } from "../libraries/Constants.sol";
 
+library LayerZeroFeeEstimation {
   /**
    * @notice Estimate actual quantity of USDC that will be delivered on target chain after pool fees
    *
@@ -42,7 +40,7 @@ library LayerZeroFeeEstimation {
     (, , OFTReceipt memory receipt) = oft.quoteOFT(sendParam);
 
     estimatedDeliveredQuantityInAssetUnits = receipt.amountReceivedLD;
-    minimumDeliveredInAssetUnits = (quantityInAssetUnits * minimumQuantityMultiplier) / PIP_PRICE_MULTIPLIER;
+    minimumDeliveredInAssetUnits = (quantityInAssetUnits * minimumQuantityMultiplier) / Constants.PIP_PRICE_MULTIPLIER;
   }
 
   /**
@@ -83,7 +81,7 @@ library LayerZeroFeeEstimation {
         dstEid: destinationEndpointId,
         to: OFTComposeMsgCodec.addressToBytes32(address(this)), // The actual to address does not affect the result
         amountLD: quantityInAssetUnits,
-        minAmountLD: (quantityInAssetUnits * minimumQuantityMultiplier) / PIP_PRICE_MULTIPLIER,
+        minAmountLD: (quantityInAssetUnits * minimumQuantityMultiplier) / Constants.PIP_PRICE_MULTIPLIER,
         extraOptions: bytes(""),
         composeMsg: composeMsg,
         oftCmd: bytes("") // Taxi mode

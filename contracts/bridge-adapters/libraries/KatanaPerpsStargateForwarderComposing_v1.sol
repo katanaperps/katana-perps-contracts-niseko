@@ -7,6 +7,8 @@ import { IERC4626 } from "@openzeppelin/contracts/token/ERC20/extensions/ERC4626
 import { OFTComposeMsgCodec } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oft/libs/OFTComposeMsgCodec.sol";
 import { IOFT, MessagingFee, SendParam } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oft/interfaces/IOFT.sol";
 
+import { Constants } from "../../libraries/Constants.sol";
+
 /**
  * @dev External library that implements forwarding logic of deposits from remote chains into
  * Katana as well as withdrawals out of Katana to remote chains. The motivation to keep this logic
@@ -32,10 +34,6 @@ library KatanaPerpsStargateForwarderComposing_v1 {
   }
 
   event ForwardFailed(address destinationWallet, uint256 quantity, bytes payload, bytes errorData);
-
-  // To convert integer pips to a fractional price shift decimal left by the pip precision of 8
-  // decimals places
-  uint64 public constant PIP_PRICE_MULTIPLIER = 10 ** 8;
 
   function compose(
     // External arguments
@@ -106,17 +104,19 @@ library KatanaPerpsStargateForwarderComposing_v1 {
     (, DepositToKatana memory depositToKatana) = abi.decode(composeMessage, (ComposeMessageType, DepositToKatana));
     address destinationWallet = depositToKatana.destinationWallet;
 
+    // Deposit USDC to the vault and receive vbUSDC
     uint256 balanceBefore = vbUSDC.balanceOf(address(this));
     vbUSDC.deposit(amountLD, address(this));
     uint256 balanceAfter = vbUSDC.balanceOf(address(this));
-    require(balanceAfter - balanceBefore == amountLD, "Unexpected slippage on vault deposit");
+    // Slippage is validated below by setting minAmountLD in SendParam
+    uint256 vbUSDCAmountToSend = balanceAfter - balanceBefore;
 
     // https://docs.layerzero.network/v2/developers/evm/oft/quickstart#estimating-gas-fees
     SendParam memory sendParam = SendParam({
       dstEid: katanaEndpointId,
       to: OFTComposeMsgCodec.addressToBytes32(exchangeLayerZeroAdapter),
-      amountLD: amountLD,
-      minAmountLD: (amountLD * minimumForwardQuantityMultiplier) / PIP_PRICE_MULTIPLIER,
+      amountLD: vbUSDCAmountToSend,
+      minAmountLD: (vbUSDCAmountToSend * minimumForwardQuantityMultiplier) / Constants.PIP_PRICE_MULTIPLIER,
       extraOptions: bytes(""),
       composeMsg: depositToKatana.exchangeLayerZeroAdapterPayload,
       oftCmd: bytes("") // Not used
@@ -124,12 +124,12 @@ library KatanaPerpsStargateForwarderComposing_v1 {
     // https://github.com/LayerZero-Labs/LayerZero-v2/blob/1fde89479fdc68b1a54cda7f19efa84483fcacc4/oapp/contracts/oft/interfaces/IOFT.sol#L127C14-L127C23
     MessagingFee memory messagingFee = vbUSDCOFTAdapter.quoteSend(sendParam, false);
     uint256 minimumNativeDrop = (messagingFee.nativeFee * minimumDepositNativeDropQuantityMultiplier) /
-      PIP_PRICE_MULTIPLIER;
+      Constants.PIP_PRICE_MULTIPLIER;
     if (msg.value < minimumNativeDrop) {
       // If the depositor did not include enough native asset, transfer the token amount forwarded from the remote
       // source chain to the destination wallet address on the local chain
-      vbUSDC.transfer(destinationWallet, amountLD);
-      emit ForwardFailed(destinationWallet, amountLD, composeMessage, "Insufficient native drop");
+      vbUSDC.transfer(destinationWallet, vbUSDCAmountToSend);
+      emit ForwardFailed(destinationWallet, vbUSDCAmountToSend, composeMessage, "Insufficient native drop");
 
       return;
     }
@@ -140,8 +140,8 @@ library KatanaPerpsStargateForwarderComposing_v1 {
     {} catch (bytes memory errorData) {
       // If the send fails, transfer the token amount forwarded from the remote source chain to the destination
       // wallet address on the local chain
-      vbUSDC.transfer(destinationWallet, amountLD);
-      emit ForwardFailed(destinationWallet, amountLD, composeMessage, errorData);
+      vbUSDC.transfer(destinationWallet, vbUSDCAmountToSend);
+      emit ForwardFailed(destinationWallet, vbUSDCAmountToSend, composeMessage, errorData);
     }
   }
 
@@ -172,17 +172,19 @@ library KatanaPerpsStargateForwarderComposing_v1 {
       return;
     }
 
+    // Redeem vbUSDC from vault and receive USDC
     uint256 balanceBefore = usdc.balanceOf(address(this));
     vbUSDC.redeem(amountLD, address(this), address(this));
     uint256 balanceAfter = usdc.balanceOf(address(this));
-    require(balanceAfter - balanceBefore == amountLD, "Unexpected slippage on vault redeem");
+    // Slippage is validated below by setting minAmountLD in SendParam
+    uint256 usdcAmountToSend = balanceAfter - balanceBefore;
 
     // https://docs.layerzero.network/v2/developers/evm/oft/quickstart#estimating-gas-fees
     SendParam memory sendParam = SendParam({
       dstEid: withdrawFromKatana.destinationEndpointId,
       to: OFTComposeMsgCodec.addressToBytes32(destinationWallet),
-      amountLD: amountLD,
-      minAmountLD: (amountLD * minimumForwardQuantityMultiplier) / PIP_PRICE_MULTIPLIER,
+      amountLD: usdcAmountToSend,
+      minAmountLD: (usdcAmountToSend * minimumForwardQuantityMultiplier) / Constants.PIP_PRICE_MULTIPLIER,
       extraOptions: bytes(""),
       composeMsg: bytes(""), // Compose not supported on withdrawal
       oftCmd: bytes("") // Not used
@@ -196,8 +198,8 @@ library KatanaPerpsStargateForwarderComposing_v1 {
     ) {
       // If the send fails, transfer the token amount forwarded from the remote source chain to the
       // destination wallet address on the local chain
-      usdc.transfer(destinationWallet, amountLD);
-      emit ForwardFailed(destinationWallet, amountLD, composeMessage, errorData);
+      usdc.transfer(destinationWallet, usdcAmountToSend);
+      emit ForwardFailed(destinationWallet, usdcAmountToSend, composeMessage, errorData);
     }
   }
 }
