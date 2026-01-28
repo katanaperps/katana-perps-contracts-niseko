@@ -84,12 +84,12 @@ contract KatanaPerpsStargateForwarder_v1 is ILayerZeroComposer, Ownable2Step {
     require(IOFT(stargate_).token() == usdc_, "USDC token address does not match Stargate");
     usdc = IERC20(usdc_);
 
+    require(Address.isContract(vbUSDCOFTAdapter_), "Invalid OFT address");
+    vbUSDCOFTAdapter = IOFT(vbUSDCOFTAdapter_);
+
     require(Address.isContract(vbUSDC_), "Invalid vbUSDC token address");
     require(IOFT(vbUSDCOFTAdapter_).token() == vbUSDC_, "vbUSDC token address does not match OFT Adapter");
     vbUSDC = IERC4626(vbUSDC_);
-
-    require(Address.isContract(vbUSDCOFTAdapter_), "Invalid OFT address");
-    vbUSDCOFTAdapter = IOFT(vbUSDCOFTAdapter_);
 
     // Pre-approve Stargate and vbUSDC contracts to allow unlimited USDC transfers
     usdc.approve(address(stargate), type(uint256).max);
@@ -97,6 +97,8 @@ contract KatanaPerpsStargateForwarder_v1 is ILayerZeroComposer, Ownable2Step {
 
     // Pre-approve vbUSDC OFT Adapter to allow unlimited vbUSDC transfers
     vbUSDC.approve(address(vbUSDCOFTAdapter_), type(uint256).max);
+    // No need to approve vbUSDC to itself for redeem calls, since both the owner and sender will
+    // be this contract
   }
 
   /**
@@ -138,8 +140,10 @@ contract KatanaPerpsStargateForwarder_v1 is ILayerZeroComposer, Ownable2Step {
       )
     {} catch (bytes memory errorData) {
       if (OFTComposeMsgCodec.srcEid(_message) == katanaEndpointId) {
+        // Withdrawals from Katana will always be vbUSDC
         vbUSDC.transfer(owner(), amountLD);
       } else {
+        // Deposits to Katana will always be USDC via Stargate
         usdc.transfer(owner(), amountLD);
       }
       emit ForwardFailed(address(0x0), amountLD, _message, errorData);
