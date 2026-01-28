@@ -49,6 +49,7 @@ interface IVerifierProxy {
     bytes calldata parameterPayload
   ) external payable returns (bytes memory verifierResponse);
 
+  // solhint-disable-next-line func-name-mixedcase
   function s_feeManager() external view returns (address);
 }
 
