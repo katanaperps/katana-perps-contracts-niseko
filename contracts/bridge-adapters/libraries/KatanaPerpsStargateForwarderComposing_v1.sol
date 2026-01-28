@@ -135,6 +135,7 @@ library KatanaPerpsStargateForwarderComposing_v1 {
     }
 
     try
+      // solhint-disable-next-line check-send-result
       vbUSDCOFTAdapter.send{ value: messagingFee.nativeFee }(sendParam, messagingFee, payable(address(this)))
     {} catch (bytes memory errorData) {
       // If the send fails, transfer the token amount forwarded from the remote source chain to the destination
@@ -189,6 +190,7 @@ library KatanaPerpsStargateForwarderComposing_v1 {
     // https://github.com/LayerZero-Labs/LayerZero-v2/blob/1fde89479fdc68b1a54cda7f19efa84483fcacc4/oapp/contracts/oft/interfaces/IOFT.sol#L127C14-L127C23
     MessagingFee memory messagingFee = stargate.quoteSend(sendParam, false);
 
+    // solhint-disable-next-line check-send-result
     try stargate.send{ value: messagingFee.nativeFee }(sendParam, messagingFee, payable(address(this))) {} catch (
       bytes memory errorData
     ) {
