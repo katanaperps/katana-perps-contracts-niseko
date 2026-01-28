@@ -3,6 +3,7 @@
 pragma solidity 0.8.25;
 
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { IERC4626 } from "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
 import { ILayerZeroComposer } from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ILayerZeroComposer.sol";
 import { OFTComposeMsgCodec } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oft/libs/OFTComposeMsgCodec.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
@@ -30,20 +31,22 @@ contract KatanaPerpsStargateForwarder_v1 is ILayerZeroComposer, Ownable2Step {
   // Remote address of contract on Katana that will be ultimate recipient of ComposeMessageType.DepositToKatana
   // messages and allowed to compose with ComposeMessageType.WithdrawFromKatana messages
   address public immutable exchangeLayerZeroAdapter;
+  // LayerZero endpoint ID for Katana, used to correctly route deposits
+  uint32 public immutable katanaEndpointId;
   // Address of LayerZero endpoint contract that will call `lzCompose` when triggered by off-chain executor
   address public immutable lzEndpoint;
   // Multiplier in pips used to calculate minimum forwarded quantity after slippage
   uint64 public minimumForwardQuantityMultiplier;
   // Multiplier in pips used to calculate minimum native drop quantity included in compose compared to actual fee
   uint64 public minimumDepositNativeDropQuantityMultiplier;
-  // The local OFT adapter contract used to bridge USDC to and from Katana
-  IOFT public immutable katanaOFT;
   // Stargate pool used to bridge tokens between the local chain and remote destination chains
   IStargate public immutable stargate;
-  // Local address of ERC-20 contract that will be forwarded via OFT adapter
+  // Local address of USDC ERC-20 contract that will be forwarded to and from remote chains via Stargate
   IERC20 public immutable usdc;
-  // LayerZero endpoint ID for Katana, used to correctly route deposits
-  uint32 public immutable katanaEndpointId;
+  // Local address of vbUSDC ERC-4626 contract that will be forwarded to and from Katana via OFT adapter
+  IERC4626 public immutable vbUSDC;
+  // The local OFT adapter contract used to bridge USDC to and from Katana
+  IOFT public immutable vbUSDCOFTAdapter;
 
   event ForwardFailed(address destinationWallet, uint256 quantity, bytes payload, bytes errorData);
 
@@ -52,17 +55,21 @@ contract KatanaPerpsStargateForwarder_v1 is ILayerZeroComposer, Ownable2Step {
    */
   constructor(
     address exchangeLayerZeroAdapter_,
+    uint32 katanaEndpointId_,
     address lzEndpoint_,
-    uint64 minimumForwardQuantityMultiplier_,
     uint64 minimumDepositNativeDropQuantityMultiplier_,
-    address katanaOFT_,
+    uint64 minimumForwardQuantityMultiplier_,
     address stargate_,
     address usdc_,
-    uint32 katanaEndpointId_
+    address vbUSDC_,
+    address vbUSDCOFTAdapter_
   ) Ownable(msg.sender) {
     // We cannot use Address.isContract here since exchangeLayerZeroAdapter is on a remote chain
     require(exchangeLayerZeroAdapter_ != address(0x0), "Invalid Bridge Adapter address");
     exchangeLayerZeroAdapter = exchangeLayerZeroAdapter_;
+
+    require(katanaEndpointId_ != 0, "Invalid Katana LZ Endpoint ID");
+    katanaEndpointId = katanaEndpointId_;
 
     require(Address.isContract(lzEndpoint_), "Invalid LZ Endpoint address");
     lzEndpoint = lzEndpoint_;
@@ -70,21 +77,26 @@ contract KatanaPerpsStargateForwarder_v1 is ILayerZeroComposer, Ownable2Step {
     setMinimumDepositNativeDropQuantityMultiplier(minimumDepositNativeDropQuantityMultiplier_);
     setMinimumForwardQuantityMultiplier(minimumForwardQuantityMultiplier_);
 
-    require(Address.isContract(katanaOFT_), "Invalid OFT address");
-    katanaOFT = IOFT(katanaOFT_);
-
     require(Address.isContract(stargate_), "Invalid Stargate address");
     stargate = IStargate(stargate_);
 
-    require(Address.isContract(usdc_), "Invalid token address");
-    require(IOFT(katanaOFT_).token() == usdc_, "Token address does not match OFT");
-    require(IOFT(stargate_).token() == usdc_, "Token address does not match Stargate");
+    require(Address.isContract(usdc_), "Invalid USDC token address");
+    require(IOFT(stargate_).token() == usdc_, "USDC token address does not match Stargate");
     usdc = IERC20(usdc_);
-    // Pre-approve OFT and Stargate contracts to allow unlimited USDC transfers via either path
-    usdc.approve(address(katanaOFT_), type(uint256).max);
-    usdc.approve(address(stargate_), type(uint256).max);
 
-    katanaEndpointId = katanaEndpointId_;
+    require(Address.isContract(vbUSDC_), "Invalid vbUSDC token address");
+    require(IOFT(vbUSDCOFTAdapter_).token() == vbUSDC_, "vbUSDC token address does not match OFT Adapter");
+    vbUSDC = IERC4626(vbUSDC_);
+
+    require(Address.isContract(vbUSDCOFTAdapter_), "Invalid OFT address");
+    vbUSDCOFTAdapter = IOFT(vbUSDCOFTAdapter_);
+
+    // Pre-approve Stargate and vbUSDC contracts to allow unlimited USDC transfers
+    usdc.approve(address(stargate), type(uint256).max);
+    usdc.approve(address(vbUSDC), type(uint256).max);
+
+    // Pre-approve vbUSDC OFT Adapter to allow unlimited vbUSDC transfers
+    vbUSDC.approve(address(vbUSDCOFTAdapter_), type(uint256).max);
   }
 
   /**
@@ -116,15 +128,20 @@ contract KatanaPerpsStargateForwarder_v1 is ILayerZeroComposer, Ownable2Step {
         _from,
         _message,
         exchangeLayerZeroAdapter,
+        katanaEndpointId,
         minimumDepositNativeDropQuantityMultiplier,
         minimumForwardQuantityMultiplier,
-        usdc,
         stargate,
-        katanaEndpointId,
-        katanaOFT
+        usdc,
+        vbUSDC,
+        vbUSDCOFTAdapter
       )
     {} catch (bytes memory errorData) {
-      usdc.transfer(owner(), amountLD);
+      if (OFTComposeMsgCodec.srcEid(_message) == katanaEndpointId) {
+        vbUSDC.transfer(owner(), amountLD);
+      } else {
+        usdc.transfer(owner(), amountLD);
+      }
       emit ForwardFailed(address(0x0), amountLD, _message, errorData);
     }
   }
@@ -186,7 +203,7 @@ contract KatanaPerpsStargateForwarder_v1 is ILayerZeroComposer, Ownable2Step {
       uint8 poolDecimals
     )
   {
-    IOFT oft = destinationEndpointId == katanaEndpointId ? katanaOFT : stargate;
+    IOFT oft = destinationEndpointId == katanaEndpointId ? vbUSDCOFTAdapter : stargate;
 
     return
       LayerZeroFeeEstimation.loadEstimatedDeliveredQuantityInAssetUnits(
@@ -210,7 +227,7 @@ contract KatanaPerpsStargateForwarder_v1 is ILayerZeroComposer, Ownable2Step {
         abi.encode(katanaEndpointId, address(this)),
         destinationEndpointIds,
         minimumForwardQuantityMultiplier,
-        katanaOFT
+        vbUSDCOFTAdapter
       )[0];
   }
 

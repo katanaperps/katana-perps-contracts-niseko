@@ -3,6 +3,7 @@
 pragma solidity 0.8.25;
 
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { IERC4626 } from "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
 import { OFTComposeMsgCodec } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oft/libs/OFTComposeMsgCodec.sol";
 import { IOFT, MessagingFee, SendParam } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oft/interfaces/IOFT.sol";
 
@@ -43,12 +44,13 @@ library KatanaPerpsStargateForwarderComposing_v1 {
     bytes calldata message,
     // State values
     address exchangeLayerZeroAdapter,
+    uint32 katanaEndpointId,
     uint64 minimumDepositNativeDropQuantityMultiplier,
     uint64 minimumForwardQuantityMultiplier,
-    IERC20 usdc,
     IOFT stargate,
-    uint32 katanaEndpointId,
-    IOFT katanaOFT
+    IERC20 usdc,
+    IERC4626 vbUSDC,
+    IOFT vbUSDCOFTAdapter
   ) public {
     // Parse out composed message
     bytes memory composeMessage = OFTComposeMsgCodec.composeMsg(message);
@@ -63,11 +65,11 @@ library KatanaPerpsStargateForwarderComposing_v1 {
           amountLD,
           composeMessage,
           exchangeLayerZeroAdapter,
+          katanaEndpointId,
           minimumDepositNativeDropQuantityMultiplier,
           minimumForwardQuantityMultiplier,
-          usdc,
-          katanaEndpointId,
-          katanaOFT
+          vbUSDC,
+          vbUSDCOFTAdapter
         );
     }
 
@@ -75,7 +77,7 @@ library KatanaPerpsStargateForwarderComposing_v1 {
     // without a reason string, so we can safely assume the final enum value below
 
     // Withdrawing from Katana Bridge Adapter to EOA
-    require(from == address(katanaOFT), "OApp must be vbUSDC OFTAdapter");
+    require(from == address(vbUSDCOFTAdapter), "OApp must be vbUSDC OFTAdapter");
     address composeFrom = OFTComposeMsgCodec.bytes32ToAddress(OFTComposeMsgCodec.composeFrom(message));
     _forwardWithdrawal(
       amountLD,
@@ -84,7 +86,8 @@ library KatanaPerpsStargateForwarderComposing_v1 {
       exchangeLayerZeroAdapter,
       minimumForwardQuantityMultiplier,
       stargate,
-      usdc
+      usdc,
+      vbUSDC
     );
   }
 
@@ -94,14 +97,19 @@ library KatanaPerpsStargateForwarderComposing_v1 {
     bytes memory composeMessage,
     // State values
     address exchangeLayerZeroAdapter,
+    uint32 katanaEndpointId,
     uint64 minimumDepositNativeDropQuantityMultiplier,
     uint64 minimumForwardQuantityMultiplier,
-    IERC20 usdc,
-    uint32 katanaEndpointId,
-    IOFT katanaOFT
+    IERC4626 vbUSDC,
+    IOFT vbUSDCOFTAdapter
   ) private {
     (, DepositToKatana memory depositToKatana) = abi.decode(composeMessage, (ComposeMessageType, DepositToKatana));
     address destinationWallet = depositToKatana.destinationWallet;
+
+    uint256 balanceBefore = vbUSDC.balanceOf(address(this));
+    vbUSDC.deposit(amountLD, address(this));
+    uint256 balanceAfter = vbUSDC.balanceOf(address(this));
+    require(balanceAfter - balanceBefore == amountLD, "Unexpected slippage on vault deposit");
 
     // https://docs.layerzero.network/v2/developers/evm/oft/quickstart#estimating-gas-fees
     SendParam memory sendParam = SendParam({
@@ -114,24 +122,24 @@ library KatanaPerpsStargateForwarderComposing_v1 {
       oftCmd: bytes("") // Not used
     });
     // https://github.com/LayerZero-Labs/LayerZero-v2/blob/1fde89479fdc68b1a54cda7f19efa84483fcacc4/oapp/contracts/oft/interfaces/IOFT.sol#L127C14-L127C23
-    MessagingFee memory messagingFee = katanaOFT.quoteSend(sendParam, false);
+    MessagingFee memory messagingFee = vbUSDCOFTAdapter.quoteSend(sendParam, false);
     uint256 minimumNativeDrop = (messagingFee.nativeFee * minimumDepositNativeDropQuantityMultiplier) /
       PIP_PRICE_MULTIPLIER;
     if (msg.value < minimumNativeDrop) {
       // If the depositor did not include enough native asset, transfer the token amount forwarded from the remote
       // source chain to the destination wallet address on the local chain
-      usdc.transfer(destinationWallet, amountLD);
+      vbUSDC.transfer(destinationWallet, amountLD);
       emit ForwardFailed(destinationWallet, amountLD, composeMessage, "Insufficient native drop");
 
       return;
     }
 
-    try katanaOFT.send{ value: messagingFee.nativeFee }(sendParam, messagingFee, payable(address(this))) {} catch (
-      bytes memory errorData
-    ) {
+    try
+      vbUSDCOFTAdapter.send{ value: messagingFee.nativeFee }(sendParam, messagingFee, payable(address(this)))
+    {} catch (bytes memory errorData) {
       // If the send fails, transfer the token amount forwarded from the remote source chain to the destination
       // wallet address on the local chain
-      usdc.transfer(destinationWallet, amountLD);
+      vbUSDC.transfer(destinationWallet, amountLD);
       emit ForwardFailed(destinationWallet, amountLD, composeMessage, errorData);
     }
   }
@@ -145,7 +153,8 @@ library KatanaPerpsStargateForwarderComposing_v1 {
     address exchangeLayerZeroAdapter,
     uint64 minimumForwardQuantityMultiplier,
     IOFT stargate,
-    IERC20 usdc
+    IERC20 usdc,
+    IERC4626 vbUSDC
   ) private {
     (, WithdrawFromKatana memory withdrawFromKatana) = abi.decode(
       composeMessage,
@@ -156,11 +165,16 @@ library KatanaPerpsStargateForwarderComposing_v1 {
     if (composeFrom != exchangeLayerZeroAdapter) {
       // Only the remote Bridge Adapter on Katana is allowed to compose withdrawals since this
       // contract will pay all the native fees needed to bridge them to the destination chain
-      usdc.transfer(destinationWallet, amountLD);
+      vbUSDC.transfer(destinationWallet, amountLD);
       emit ForwardFailed(destinationWallet, amountLD, composeMessage, "Invalid compose from");
 
       return;
     }
+
+    uint256 balanceBefore = usdc.balanceOf(address(this));
+    vbUSDC.redeem(amountLD, address(this), address(this));
+    uint256 balanceAfter = usdc.balanceOf(address(this));
+    require(balanceAfter - balanceBefore == amountLD, "Unexpected slippage on vault redeem");
 
     // https://docs.layerzero.network/v2/developers/evm/oft/quickstart#estimating-gas-fees
     SendParam memory sendParam = SendParam({
