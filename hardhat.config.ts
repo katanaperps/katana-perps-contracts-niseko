@@ -85,6 +85,38 @@ const config: HardhatUserConfig = {
     hardhat: {
       allowUnlimitedContractSize: !!process.env.COVERAGE,
     },
+    bokutoTestnet: {
+      chainId: 737373,
+      url: 'https://rpc-bokuto.katanarpc.com',
+    },
+    katanaMainnet: {
+      chainId: 747474,
+      url: 'https://rpc.katanarpc.com',
+    },
+  },
+  etherscan: {
+    apiKey: {
+      bokutoTestnet: 'abc',
+      katanaMainnet: 'abc',
+    },
+    customChains: [
+      {
+        network: 'bokutoTestnet',
+        chainId: 737373,
+        urls: {
+          apiURL: 'https://explorer-bokuto.katanarpc.com/api',
+          browserURL: 'https://explorer-bokuto.katanarpc.com/',
+        },
+      },
+      {
+        network: 'katanaMainnet',
+        chainId: 747474,
+        urls: {
+          apiURL: 'https://explorer.katanarpc.com/api',
+          browserURL: 'https://explorer.katanarpc.com/',
+        },
+      },
+    ],
   },
 };
 
