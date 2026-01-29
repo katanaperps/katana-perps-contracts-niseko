@@ -1,6 +1,6 @@
 {
   "name": "@katanaperps/katana-perps-contracts-niseko",
-  "version": "1.0.0",
+  "version": "1.0.0-chainlink-adapter.1",
   "description": "Collects source code, tests, and documentation for the Katana Perps Niseko release Solidity contracts",
   "homepage": "https://github.com/katanaperps/katana-perps-contracts-niseko",
   "repository": "https://github.com/katanaperps/katana-perps-contracts-niseko",
