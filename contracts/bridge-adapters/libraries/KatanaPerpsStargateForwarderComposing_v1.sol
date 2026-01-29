@@ -8,7 +8,6 @@ import { OFTComposeMsgCodec } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oft/
 import { IOFT, MessagingFee, SendParam } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oft/interfaces/IOFT.sol";
 
 import { Constants } from "../../libraries/Constants.sol";
-import { USDC } from "../../test/USDC.sol";
 
 /**
  * @dev External library that implements forwarding logic of deposits from remote chains into
