@@ -306,30 +306,21 @@ contract ExchangeLayerZeroAdapter_v1 is BridgeAdapterEvents, ILayerZeroComposer,
   /**
    * @notice Load current gas fees for withdrawing to Ethereum
    */
-  function loadEthereumWithdrawalGasFeesInAssetUnits()
-    public
-    view
-    returns (uint256 gasFeeWithoutForwardInAssetUnits, uint256 gasFeeWithForwardInAssetUnits)
-  {
+  function loadEthereumWithdrawalGasFeeInAssetUnits() public view returns (uint256) {
     uint32[] memory destinationEndpointIds = new uint32[](1);
     destinationEndpointIds[0] = ethereumEndpointId;
 
-    gasFeeWithoutForwardInAssetUnits = LayerZeroFeeEstimation.loadGasFeesInAssetUnits(
-      bytes("0x"), // Compose not supported for withdrawals
-      destinationEndpointIds,
-      minimumWithdrawQuantityMultiplier,
-      oft
-    )[0];
-    gasFeeWithForwardInAssetUnits = LayerZeroFeeEstimation.loadGasFeesInAssetUnits(
-      abi.encode(
-        KatanaPerpsStargateForwarderComposing_v1.ComposeMessageType.WithdrawFromKatana,
-        // The encoded destination endpoint and wallet values do not matter for estimation purposes
-        KatanaPerpsStargateForwarderComposing_v1.WithdrawFromKatana(ethereumEndpointId, address(this))
-      ),
-      destinationEndpointIds,
-      minimumWithdrawQuantityMultiplier,
-      oft
-    )[0];
+    return
+      LayerZeroFeeEstimation.loadGasFeesInAssetUnits(
+        abi.encode(
+          KatanaPerpsStargateForwarderComposing_v1.ComposeMessageType.WithdrawFromKatana,
+          // The encoded destination endpoint and wallet values do not matter for estimation purposes
+          KatanaPerpsStargateForwarderComposing_v1.WithdrawFromKatana(ethereumEndpointId, address(this))
+        ),
+        destinationEndpointIds,
+        minimumWithdrawQuantityMultiplier,
+        oft
+      )[0];
   }
 
   function _getSendParamForWithdraw(
@@ -338,21 +329,6 @@ contract ExchangeLayerZeroAdapter_v1 is BridgeAdapterEvents, ILayerZeroComposer,
     bytes memory payload
   ) private view returns (SendParam memory) {
     uint32 destinationEndpointId = abi.decode(payload, (uint32));
-
-    // Withdrawing to wallet on Ethereum, no compose
-    if (destinationEndpointId == ethereumEndpointId) {
-      return
-        // https://docs.layerzero.network/v2/developers/evm/oft/quickstart#estimating-gas-fees
-        SendParam({
-          dstEid: ethereumEndpointId,
-          to: OFTComposeMsgCodec.addressToBytes32(depositorWallet),
-          amountLD: quantityInAssetUnits,
-          minAmountLD: (quantityInAssetUnits * minimumWithdrawQuantityMultiplier) / Constants.PIP_PRICE_MULTIPLIER,
-          extraOptions: bytes(""), // No extra native asset needed
-          composeMsg: bytes(""), // Compose not supported for withdrawals
-          oftCmd: bytes("") // Taxi mode
-        });
-    }
 
     // Withdrawing to Stargate Forwarder contract on Ethereum
     return
