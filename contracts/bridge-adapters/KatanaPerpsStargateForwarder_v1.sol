@@ -28,6 +28,8 @@ contract KatanaPerpsStargateForwarder_v1 is ILayerZeroComposer, Ownable2Step {
   // 0.000001%
   uint64 public constant MIN_MULTIPLIER = 1;
 
+  // LayerZero endpoint ID for Ethereum, used to correctly route withdrawals
+  uint32 public immutable ethereumEndpointId;
   // Remote address of contract on Katana that will be ultimate recipient of ComposeMessageType.DepositToKatana
   // messages and allowed to compose with ComposeMessageType.WithdrawFromKatana messages
   address public immutable exchangeLayerZeroAdapter;
@@ -54,6 +56,7 @@ contract KatanaPerpsStargateForwarder_v1 is ILayerZeroComposer, Ownable2Step {
    * @notice Instantiate a new `KatanaPerpsStargateForwarder_v1` contract
    */
   constructor(
+    uint32 ethereumEndpointId_,
     address exchangeLayerZeroAdapter_,
     uint32 katanaEndpointId_,
     address lzEndpoint_,
@@ -64,11 +67,14 @@ contract KatanaPerpsStargateForwarder_v1 is ILayerZeroComposer, Ownable2Step {
     address vbUSDC_,
     address vbUSDCOFTAdapter_
   ) Ownable(msg.sender) {
+    require(ethereumEndpointId_ != 0, "Invalid Ethereum LZ Endpoint ID");
+    ethereumEndpointId = ethereumEndpointId_;
+
     // We cannot use Address.isContract here since exchangeLayerZeroAdapter is on a remote chain
     require(exchangeLayerZeroAdapter_ != address(0x0), "Invalid Bridge Adapter address");
     exchangeLayerZeroAdapter = exchangeLayerZeroAdapter_;
 
-    require(katanaEndpointId_ != 0, "Invalid Katana LZ Endpoint ID");
+    require(katanaEndpointId_ != 0 && katanaEndpointId_ != ethereumEndpointId_, "Invalid Katana LZ Endpoint ID");
     katanaEndpointId = katanaEndpointId_;
 
     require(Address.isContract(lzEndpoint_), "Invalid LZ Endpoint address");
@@ -129,6 +135,7 @@ contract KatanaPerpsStargateForwarder_v1 is ILayerZeroComposer, Ownable2Step {
         amountLD,
         _from,
         _message,
+        ethereumEndpointId,
         exchangeLayerZeroAdapter,
         katanaEndpointId,
         minimumDepositNativeDropQuantityMultiplier,

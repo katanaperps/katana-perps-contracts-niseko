@@ -41,6 +41,7 @@ library KatanaPerpsStargateForwarderComposing_v1 {
     address from,
     bytes calldata message,
     // State values
+    uint32 ethereumEndpointId,
     address exchangeLayerZeroAdapter,
     uint32 katanaEndpointId,
     uint64 minimumDepositNativeDropQuantityMultiplier,
@@ -81,6 +82,7 @@ library KatanaPerpsStargateForwarderComposing_v1 {
       amountLD,
       composeFrom,
       composeMessage,
+      ethereumEndpointId,
       exchangeLayerZeroAdapter,
       minimumForwardQuantityMultiplier,
       stargate,
@@ -151,6 +153,7 @@ library KatanaPerpsStargateForwarderComposing_v1 {
     address composeFrom,
     bytes memory composeMessage,
     // State values
+    uint32 ethereumEndpointId,
     address exchangeLayerZeroAdapter,
     uint64 minimumForwardQuantityMultiplier,
     IOFT stargate,
@@ -178,6 +181,13 @@ library KatanaPerpsStargateForwarderComposing_v1 {
     uint256 balanceAfter = usdc.balanceOf(address(this));
     // Slippage is validated below by setting minAmountLD in SendParam
     uint256 usdcAmountToSend = balanceAfter - balanceBefore;
+
+    // If the destination endpoint ID is Ethereum then a second hop is not required, transfer USDC
+    // directly to destination wallet
+    if (withdrawFromKatana.destinationEndpointId == ethereumEndpointId) {
+      usdc.transfer(destinationWallet, usdcAmountToSend);
+      return;
+    }
 
     // https://docs.layerzero.network/v2/developers/evm/oft/quickstart#estimating-gas-fees
     SendParam memory sendParam = SendParam({

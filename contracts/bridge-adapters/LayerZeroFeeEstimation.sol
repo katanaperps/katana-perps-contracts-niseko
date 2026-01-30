@@ -10,6 +10,7 @@ import {
   SendParam
 } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oft/interfaces/IOFT.sol";
 
+import { AssetUnitConversions } from "../libraries/AssetUnitConversions.sol";
 import { Constants } from "../libraries/Constants.sol";
 
 library LayerZeroFeeEstimation {
@@ -30,7 +31,7 @@ library LayerZeroFeeEstimation {
   {
     poolDecimals = oft.sharedDecimals();
 
-    uint256 quantityInAssetUnits = _pipsToAssetUnits(quantity, poolDecimals);
+    uint256 quantityInAssetUnits = AssetUnitConversions.pipsToAssetUnits(quantity, poolDecimals);
     SendParam memory sendParam = _getSendParamForEstimation(
       bytes(""), // The compose message does not affect pool slippage
       destinationEndpointId,
@@ -86,18 +87,5 @@ library LayerZeroFeeEstimation {
         composeMsg: composeMsg,
         oftCmd: bytes("") // Taxi mode
       });
-  }
-
-  /*
-   * @dev Copied here from AssetUnitConversions.sol due to Solidity version mismatch
-   */
-  function _pipsToAssetUnits(uint64 quantity, uint8 assetDecimals) private pure returns (uint256) {
-    require(assetDecimals <= 32, "Asset cannot have more than 32 decimals");
-
-    // Exponents cannot be negative, so divide or multiply based on exponent signedness
-    if (assetDecimals > 8) {
-      return uint256(quantity) * (uint256(10) ** (assetDecimals - 8));
-    }
-    return uint256(quantity) / (uint256(10) ** (8 - assetDecimals));
   }
 }
