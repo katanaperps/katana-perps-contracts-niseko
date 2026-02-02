@@ -33,6 +33,8 @@ contract KatanaPerpsStargateForwarder_v1 is ILayerZeroComposer, Ownable2Step {
   // Remote address of contract on Katana that will be ultimate recipient of ComposeMessageType.DepositToKatana
   // messages and allowed to compose with ComposeMessageType.WithdrawFromKatana messages
   address public immutable exchangeLayerZeroAdapter;
+  // The maximum amount of gas available for the lzCompose call on the Katana exchangeLayerZeroAdapter contract
+  uint128 public katanaComposeGasLimit;
   // LayerZero endpoint ID for Katana, used to correctly route deposits
   uint32 public immutable katanaEndpointId;
   // Address of LayerZero endpoint contract that will call `lzCompose` when triggered by off-chain executor
@@ -58,6 +60,7 @@ contract KatanaPerpsStargateForwarder_v1 is ILayerZeroComposer, Ownable2Step {
   constructor(
     uint32 ethereumEndpointId_,
     address exchangeLayerZeroAdapter_,
+    uint128 katanaComposeGasLimit_,
     uint32 katanaEndpointId_,
     address lzEndpoint_,
     uint64 minimumDepositNativeDropQuantityMultiplier_,
@@ -73,6 +76,8 @@ contract KatanaPerpsStargateForwarder_v1 is ILayerZeroComposer, Ownable2Step {
     // We cannot use Address.isContract here since exchangeLayerZeroAdapter is on a remote chain
     require(exchangeLayerZeroAdapter_ != address(0x0), "Invalid Bridge Adapter address");
     exchangeLayerZeroAdapter = exchangeLayerZeroAdapter_;
+
+    setKatanaComposeGasLimit(katanaComposeGasLimit_);
 
     require(katanaEndpointId_ != 0 && katanaEndpointId_ != ethereumEndpointId_, "Invalid Katana LZ Endpoint ID");
     katanaEndpointId = katanaEndpointId_;
@@ -132,18 +137,21 @@ contract KatanaPerpsStargateForwarder_v1 is ILayerZeroComposer, Ownable2Step {
 
     try
       KatanaPerpsStargateForwarderComposing_v1.compose(
-        amountLD,
-        _from,
-        _message,
-        ethereumEndpointId,
-        exchangeLayerZeroAdapter,
-        katanaEndpointId,
-        minimumDepositNativeDropQuantityMultiplier,
-        minimumForwardQuantityMultiplier,
-        stargate,
-        usdc,
-        vbUSDC,
-        vbUSDCOFTAdapter
+        KatanaPerpsStargateForwarderComposing_v1.ComposeArguments(
+          amountLD,
+          _from,
+          ethereumEndpointId,
+          exchangeLayerZeroAdapter,
+          katanaComposeGasLimit,
+          katanaEndpointId,
+          minimumDepositNativeDropQuantityMultiplier,
+          minimumForwardQuantityMultiplier,
+          stargate,
+          usdc,
+          vbUSDC,
+          vbUSDCOFTAdapter
+        ),
+        _message
       )
     {} catch (bytes memory errorData) {
       if (OFTComposeMsgCodec.srcEid(_message) == katanaEndpointId) {
@@ -155,6 +163,18 @@ contract KatanaPerpsStargateForwarder_v1 is ILayerZeroComposer, Ownable2Step {
       }
       emit ForwardFailed(address(0x0), amountLD, _message, errorData);
     }
+  }
+
+  /**
+   * @notice Sets the maximum amount of gas available for the lzCompose call on the Katana
+   * exchangeLayerZeroAdapter contract
+   *
+   * @param newKatanaComposeGasLimit The maximum amount of gas available for the lzCompose call on
+   * the Katana exchangeLayerZeroAdapter contract
+   */
+  function setKatanaComposeGasLimit(uint128 newKatanaComposeGasLimit) public onlyOwner {
+    require(newKatanaComposeGasLimit > 0, "Value out of bounds");
+    katanaComposeGasLimit = newKatanaComposeGasLimit;
   }
 
   /**
