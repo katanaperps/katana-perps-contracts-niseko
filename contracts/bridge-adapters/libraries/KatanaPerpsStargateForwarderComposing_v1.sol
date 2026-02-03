@@ -92,7 +92,7 @@ library KatanaPerpsStargateForwarderComposing_v1 {
       dstEid: arguments.katanaEndpointId,
       to: OFTComposeMsgCodec.addressToBytes32(arguments.exchangeLayerZeroAdapter),
       amountLD: vbUSDCAmountToSend,
-      minAmountLD: (vbUSDCAmountToSend * arguments.minimumForwardQuantityMultiplier) / Constants.PIP_PRICE_MULTIPLIER,
+      minAmountLD: (arguments.amountLD * arguments.minimumForwardQuantityMultiplier) / Constants.PIP_PRICE_MULTIPLIER,
       extraOptions: OptionsBuilder.newOptions().addExecutorLzComposeOption(0, arguments.katanaComposeGasLimit, 0),
       composeMsg: depositToKatana.exchangeLayerZeroAdapterPayload,
       oftCmd: bytes("") // Not used
@@ -160,7 +160,7 @@ library KatanaPerpsStargateForwarderComposing_v1 {
       dstEid: withdrawFromKatana.destinationEndpointId,
       to: OFTComposeMsgCodec.addressToBytes32(destinationWallet),
       amountLD: usdcAmountToSend,
-      minAmountLD: (usdcAmountToSend * arguments.minimumForwardQuantityMultiplier) / Constants.PIP_PRICE_MULTIPLIER,
+      minAmountLD: (arguments.amountLD * arguments.minimumForwardQuantityMultiplier) / Constants.PIP_PRICE_MULTIPLIER,
       extraOptions: bytes(""),
       composeMsg: bytes(""), // Compose not supported on withdrawal
       oftCmd: bytes("") // Not used

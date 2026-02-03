@@ -5,6 +5,7 @@ pragma solidity 0.8.25;
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { ILayerZeroComposer } from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ILayerZeroComposer.sol";
 import { OFTComposeMsgCodec } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oft/libs/OFTComposeMsgCodec.sol";
+import { OptionsBuilder } from "@layerzerolabs/oapp-evm/contracts/oapp/libs/OptionsBuilder.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { Ownable2Step } from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import { IOFT, MessagingFee, SendParam } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oft/interfaces/IOFT.sol";
@@ -19,12 +20,16 @@ import { LayerZeroFeeEstimation } from "./LayerZeroFeeEstimation.sol";
 
 // solhint-disable-next-line contract-name-capwords
 contract ExchangeLayerZeroAdapter_v1 is BridgeAdapterEvents, ILayerZeroComposer, Ownable2Step {
+  using OptionsBuilder for bytes;
+
   // Quote asset quantity paid to Fee Wallet when creating a Managed Account
   uint64 public addManagedAccountDepositFeeQuantityInAssetUnits;
   // Native asset quantity to air drop Manager Wallet when creating a Managed Account
   uint64 public addManagedAccountManagerWalletNativeDropQuantity;
   // Quote asset quantity paid to Fee Wallet when depositing to a Managed Account
   uint64 public depositToManagedAccountFeeQuantityInAssetUnits;
+  // The maximum amount of gas available for the lzCompose call on the Ethereum stargateForwarder contract
+  uint128 public ethereumComposeGasLimit;
   // Must be true or `lzCompose` will revert
   bool public isDepositEnabled;
   // Must be true or `withdrawQuoteAsset` will revert
@@ -76,6 +81,7 @@ contract ExchangeLayerZeroAdapter_v1 is BridgeAdapterEvents, ILayerZeroComposer,
   constructor(
     uint64 addManagedAccountDepositFeeQuantityInAssetUnits_,
     uint64 addManagedAccountManagerWalletNativeDropQuantity_,
+    uint128 ethereumComposeGasLimit_,
     uint32 ethereumEndpointId_,
     uint64 depositToManagedAccountFeeQuantityInAssetUnits_,
     address exchange_,
@@ -85,6 +91,9 @@ contract ExchangeLayerZeroAdapter_v1 is BridgeAdapterEvents, ILayerZeroComposer,
     uint64 minimumWithdrawQuantityMultiplier_,
     address oft_
   ) Ownable(msg.sender) {
+    setEthereumComposeGasLimit(ethereumComposeGasLimit_);
+
+    require(ethereumEndpointId_ != 0, "Invalid Ethereum LZ Endpoint ID");
     ethereumEndpointId = ethereumEndpointId_;
 
     require(Address.isContract(exchange_), "Invalid Exchange address");
@@ -189,6 +198,18 @@ contract ExchangeLayerZeroAdapter_v1 is BridgeAdapterEvents, ILayerZeroComposer,
     minimumAddManagedAccountDepositQuantityInAssetUnits = minimumAddManagedAccountDepositQuantityInAssetUnits_;
     minimumDepositToManagedAccountQuantityInAssetUnits = minimumDepositToManagedAccountQuantityInAssetUnits_;
     minimumWithdrawQuantityMultiplier = minimumWithdrawQuantityMultiplier_;
+  }
+
+  /**
+   * @notice Sets the maximum amount of gas available for the lzCompose call on the Ethereum
+   * stargateForwarder contract
+   *
+   * @param newEthereumComposeGasLimit The maximum amount of gas available for the lzCompose call on
+   * the Ethereum stargateForwarder contract
+   */
+  function setEthereumComposeGasLimit(uint128 newEthereumComposeGasLimit) public onlyOwner {
+    require(newEthereumComposeGasLimit > 0, "Value out of bounds");
+    ethereumComposeGasLimit = newEthereumComposeGasLimit;
   }
 
   /**
@@ -337,7 +358,7 @@ contract ExchangeLayerZeroAdapter_v1 is BridgeAdapterEvents, ILayerZeroComposer,
         to: OFTComposeMsgCodec.addressToBytes32(stargateForwarder),
         amountLD: quantityInAssetUnits,
         minAmountLD: (quantityInAssetUnits * minimumWithdrawQuantityMultiplier) / Constants.PIP_PRICE_MULTIPLIER,
-        extraOptions: bytes(""), // No extra native asset needed
+        extraOptions: OptionsBuilder.newOptions().addExecutorLzComposeOption(0, ethereumComposeGasLimit, 0),
         composeMsg: abi.encode(
           KatanaPerpsStargateForwarderComposing_v1.ComposeMessageType.WithdrawFromKatana,
           KatanaPerpsStargateForwarderComposing_v1.WithdrawFromKatana(destinationEndpointId, depositorWallet)
