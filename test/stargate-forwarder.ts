@@ -595,6 +595,157 @@ describe('KatanaPerpsStargateForwarder_v1', function () {
         depositQuantityInAssetUnits,
       );
     });
+
+    it('should emit ForwardFailed and transfer USDC to owner when from is not the expected address', async () => {
+      // Transfer USDC to the forwarder (simulating bridged tokens arriving)
+      await usdc.transfer(
+        await forwarder.getAddress(),
+        depositQuantityInAssetUnits,
+      );
+
+      const ownerAddress = await forwarder.owner();
+      const ownerUsdcBefore = await usdc.balanceOf(ownerAddress);
+      const startBlock = await ethers.provider.getBlockNumber();
+
+      // Call lzCompose with wrong from address (not stargate)
+      await stargatePoolMock.lzCompose(
+        await forwarder.getAddress(),
+        traderWallet.address, // Wrong: should be stargatePoolMock address
+        ethers.randomBytes(32),
+        composeMessage,
+        await stargatePoolMock.getAddress(),
+        '0x',
+      );
+
+      // Assert ForwardFailed event was emitted
+      const forwardFailedEvents = await forwarder.queryFilter(
+        forwarder.filters.ForwardFailed(),
+        startBlock + 1,
+      );
+      expect(forwardFailedEvents).to.have.lengthOf(1);
+      expect(forwardFailedEvents[0].args.destinationWallet).to.equal(
+        ethers.ZeroAddress,
+      );
+      expect(forwardFailedEvents[0].args.quantity).to.equal(
+        depositQuantityInAssetUnits,
+      );
+      // Verify errorData encodes the expected error string
+      expect(
+        Buffer.from(
+          forwardFailedEvents[0].args.errorData.substring(2),
+          'hex',
+        ).toString('utf8'),
+      ).to.match(/oapp must be stargate/i);
+
+      // Assert USDC was transferred to owner as failsafe
+      const ownerUsdcAfter = await usdc.balanceOf(ownerAddress);
+      expect(ownerUsdcAfter - ownerUsdcBefore).to.equal(
+        depositQuantityInAssetUnits,
+      );
+    });
+
+    it('should emit ForwardFailed and transfer vbUSDC to destinationWallet when insufficient native drop', async () => {
+      // Set a non-zero nativeFee on vbUsdcOftAdapterMock to trigger insufficient native drop
+      const nativeFee = ethers.parseEther('0.1');
+      await vbUsdcOftAdapterMock.setFees(nativeFee, 0);
+
+      // Transfer USDC to the forwarder (simulating bridged tokens arriving)
+      await usdc.transfer(
+        await forwarder.getAddress(),
+        depositQuantityInAssetUnits,
+      );
+
+      const traderVbUsdcBefore = await vbUsdc.balanceOf(traderWallet.address);
+      const startBlock = await ethers.provider.getBlockNumber();
+
+      // Call lzCompose without providing native value (insufficient for the fee)
+      await stargatePoolMock.lzCompose(
+        await forwarder.getAddress(),
+        await stargatePoolMock.getAddress(), // from = stargate
+        ethers.randomBytes(32),
+        composeMessage,
+        await stargatePoolMock.getAddress(),
+        '0x',
+      );
+
+      // Assert ForwardFailed event was emitted
+      const forwardFailedEvents = await forwarder.queryFilter(
+        forwarder.filters.ForwardFailed(),
+        startBlock + 1,
+      );
+      expect(forwardFailedEvents).to.have.lengthOf(1);
+      expect(forwardFailedEvents[0].args.destinationWallet).to.equal(
+        traderWallet.address,
+      );
+      // vbUSDC amount should equal deposit amount (1:1 initially)
+      expect(forwardFailedEvents[0].args.quantity).to.equal(
+        depositQuantityInAssetUnits,
+      );
+      // Verify errorData encodes the expected error string
+      expect(
+        Buffer.from(
+          forwardFailedEvents[0].args.errorData.substring(2),
+          'hex',
+        ).toString('utf8'),
+      ).to.match(/insufficient native drop/i);
+
+      // Assert vbUSDC was transferred to destinationWallet (traderWallet)
+      const traderVbUsdcAfter = await vbUsdc.balanceOf(traderWallet.address);
+      expect(traderVbUsdcAfter - traderVbUsdcBefore).to.equal(
+        depositQuantityInAssetUnits,
+      );
+    });
+
+    it('should emit ForwardFailed and transfer vbUSDC to destinationWallet when OFT send fails', async () => {
+      // Disable send on vbUsdcOftAdapterMock to trigger the send failure fallback
+      await vbUsdcOftAdapterMock.setSendDisabled(true);
+
+      // Transfer USDC to the forwarder (simulating bridged tokens arriving)
+      await usdc.transfer(
+        await forwarder.getAddress(),
+        depositQuantityInAssetUnits,
+      );
+
+      const traderVbUsdcBefore = await vbUsdc.balanceOf(traderWallet.address);
+      const startBlock = await ethers.provider.getBlockNumber();
+
+      // Call lzCompose - send will fail and trigger fallback
+      await stargatePoolMock.lzCompose(
+        await forwarder.getAddress(),
+        await stargatePoolMock.getAddress(), // from = stargate
+        ethers.randomBytes(32),
+        composeMessage,
+        await stargatePoolMock.getAddress(),
+        '0x',
+      );
+
+      // Assert ForwardFailed event was emitted
+      const forwardFailedEvents = await forwarder.queryFilter(
+        forwarder.filters.ForwardFailed(),
+        startBlock + 1,
+      );
+      expect(forwardFailedEvents).to.have.lengthOf(1);
+      expect(forwardFailedEvents[0].args.destinationWallet).to.equal(
+        traderWallet.address,
+      );
+      // vbUSDC amount should equal deposit amount (1:1 initially)
+      expect(forwardFailedEvents[0].args.quantity).to.equal(
+        depositQuantityInAssetUnits,
+      );
+      // Verify errorData encodes the expected error string "Send disabled"
+      expect(
+        Buffer.from(
+          forwardFailedEvents[0].args.errorData.substring(2),
+          'hex',
+        ).toString('utf8'),
+      ).to.match(/send disabled/i);
+
+      // Assert vbUSDC was transferred to destinationWallet (traderWallet)
+      const traderVbUsdcAfter = await vbUsdc.balanceOf(traderWallet.address);
+      expect(traderVbUsdcAfter - traderVbUsdcBefore).to.equal(
+        depositQuantityInAssetUnits,
+      );
+    });
   });
 
   describe('lzCompose with withdrawal payload', function () {
@@ -743,6 +894,336 @@ describe('KatanaPerpsStargateForwarder_v1', function () {
       // Assert Stargate received USDC (via send call for bridging)
       const stargateUsdcAfter = await usdc.balanceOf(stargateAddress);
       expect(stargateUsdcAfter - stargateUsdcBefore).to.equal(
+        withdrawQuantityInAssetUnits,
+      );
+    });
+
+    it('should emit ForwardFailed and transfer vbUSDC to owner when from is not the expected address', async () => {
+      const forwarderAddress = await forwarder.getAddress();
+      const exchangeLayerZeroAdapterAddress =
+        await stargatePoolMock.getAddress();
+
+      // Build withdrawal compose message with srcEid = katanaEndpointId
+      const withdrawalPayload = ethers.AbiCoder.defaultAbiCoder().encode(
+        ['uint8', 'tuple(uint32,address)'],
+        [
+          1, // ComposeMessageType.WithdrawFromKatana
+          [
+            ethereumEndpointId, // destinationEndpointId
+            traderWallet.address, // destinationWallet
+          ],
+        ],
+      );
+      // Build compose message with srcEid = katanaEndpointId (for withdrawal from Katana)
+      const composeMessage = ethers.solidityPacked(
+        ['uint64', 'uint32', 'uint256', 'bytes'],
+        [
+          0, // Nonce
+          katanaEndpointId, // Source EID = katanaEndpointId for withdrawals
+          withdrawQuantityInAssetUnits, // Amount
+          ethers.solidityPacked(
+            ['bytes', 'bytes'],
+            [
+              // Compose from
+              ethers.AbiCoder.defaultAbiCoder().encode(
+                ['address'],
+                [exchangeLayerZeroAdapterAddress],
+              ),
+              // Compose message
+              withdrawalPayload,
+            ],
+          ),
+        ],
+      );
+
+      // Mint vbUSDC to the forwarder (simulating tokens arriving from Katana)
+      await usdc.approve(
+        await vbUsdc.getAddress(),
+        withdrawQuantityInAssetUnits,
+      );
+      await vbUsdc.deposit(withdrawQuantityInAssetUnits, forwarderAddress);
+
+      const ownerAddress = await forwarder.owner();
+      const ownerVbUsdcBefore = await vbUsdc.balanceOf(ownerAddress);
+      const startBlock = await ethers.provider.getBlockNumber();
+
+      // Call lzCompose with wrong from address (not vbUSDCOFTAdapter)
+      await stargatePoolMock.lzCompose(
+        forwarderAddress,
+        traderWallet.address, // Wrong: should be vbUsdcOftAdapterMock address
+        ethers.randomBytes(32),
+        composeMessage,
+        await stargatePoolMock.getAddress(),
+        '0x',
+      );
+
+      // Assert ForwardFailed event was emitted
+      const forwardFailedEvents = await forwarder.queryFilter(
+        forwarder.filters.ForwardFailed(),
+        startBlock + 1,
+      );
+      expect(forwardFailedEvents).to.have.lengthOf(1);
+      expect(forwardFailedEvents[0].args.destinationWallet).to.equal(
+        ethers.ZeroAddress,
+      );
+      expect(forwardFailedEvents[0].args.quantity).to.equal(
+        withdrawQuantityInAssetUnits,
+      );
+      // Verify errorData encodes the expected error string
+      expect(
+        Buffer.from(
+          forwardFailedEvents[0].args.errorData.substring(2),
+          'hex',
+        ).toString('utf8'),
+      ).to.match(/oapp must be vbusdc oftadapter/i);
+
+      // Assert vbUSDC was transferred to owner as failsafe
+      const ownerVbUsdcAfter = await vbUsdc.balanceOf(ownerAddress);
+      expect(ownerVbUsdcAfter - ownerVbUsdcBefore).to.equal(
+        withdrawQuantityInAssetUnits,
+      );
+    });
+
+    it('should emit ForwardFailed and transfer vbUSDC to destinationWallet when composeFrom is invalid', async () => {
+      const forwarderAddress = await forwarder.getAddress();
+
+      // Build withdrawal compose message with invalid composeFrom (not exchangeLayerZeroAdapter)
+      const withdrawalPayload = ethers.AbiCoder.defaultAbiCoder().encode(
+        ['uint8', 'tuple(uint32,address)'],
+        [
+          1, // ComposeMessageType.WithdrawFromKatana
+          [
+            ethereumEndpointId, // destinationEndpointId
+            traderWallet.address, // destinationWallet
+          ],
+        ],
+      );
+      // Build compose message with wrong composeFrom (traderWallet instead of exchangeLayerZeroAdapter)
+      const composeMessage = ethers.solidityPacked(
+        ['uint64', 'uint32', 'uint256', 'bytes'],
+        [
+          0, // Nonce
+          katanaEndpointId, // Source EID = katanaEndpointId for withdrawals
+          withdrawQuantityInAssetUnits, // Amount
+          ethers.solidityPacked(
+            ['bytes', 'bytes'],
+            [
+              // Compose from - wrong address (not exchangeLayerZeroAdapter)
+              ethers.AbiCoder.defaultAbiCoder().encode(
+                ['address'],
+                [traderWallet.address],
+              ),
+              // Compose message
+              withdrawalPayload,
+            ],
+          ),
+        ],
+      );
+
+      // Mint vbUSDC to the forwarder (simulating tokens arriving from Katana)
+      await usdc.approve(
+        await vbUsdc.getAddress(),
+        withdrawQuantityInAssetUnits,
+      );
+      await vbUsdc.deposit(withdrawQuantityInAssetUnits, forwarderAddress);
+
+      const traderVbUsdcBefore = await vbUsdc.balanceOf(traderWallet.address);
+      const startBlock = await ethers.provider.getBlockNumber();
+
+      // Call lzCompose with correct from (vbUSDCOFTAdapter) but wrong composeFrom in message
+      await stargatePoolMock.lzCompose(
+        forwarderAddress,
+        await vbUsdcOftAdapterMock.getAddress(), // from = vbUSDCOFTAdapter (correct)
+        ethers.randomBytes(32),
+        composeMessage,
+        await stargatePoolMock.getAddress(),
+        '0x',
+      );
+
+      // Assert ForwardFailed event was emitted
+      const forwardFailedEvents = await forwarder.queryFilter(
+        forwarder.filters.ForwardFailed(),
+        startBlock + 1,
+      );
+      expect(forwardFailedEvents).to.have.lengthOf(1);
+      expect(forwardFailedEvents[0].args.destinationWallet).to.equal(
+        traderWallet.address,
+      );
+      expect(forwardFailedEvents[0].args.quantity).to.equal(
+        withdrawQuantityInAssetUnits,
+      );
+      // Verify errorData encodes the expected error string
+      expect(
+        Buffer.from(
+          forwardFailedEvents[0].args.errorData.substring(2),
+          'hex',
+        ).toString('utf8'),
+      ).to.match(/invalid compose from/i);
+
+      // Assert vbUSDC was transferred to destinationWallet (traderWallet) as failsafe
+      const traderVbUsdcAfter = await vbUsdc.balanceOf(traderWallet.address);
+      expect(traderVbUsdcAfter - traderVbUsdcBefore).to.equal(
+        withdrawQuantityInAssetUnits,
+      );
+    });
+
+    it('should emit ForwardFailed and transfer vbUSDC to destinationWallet when slippage exceeded', async () => {
+      // Set a high redeem fee to trigger slippage check failure
+      // minimumForwardQuantityMultiplier is 80%, so if previewRedeem returns < 80% of input, it fails
+      // For 5 USDC input, minUsdcAmount = 5 * 0.80 = 4 USDC
+      // Setting redeemFee to 1.5 USDC makes previewRedeem return 3.5 USDC < 4 USDC
+      const highRedeemFee = ethers.parseUnits('1.5', quoteAssetDecimals);
+      await vbUsdc.setRedeemFee(highRedeemFee);
+
+      // Fund the vbUSDC vault with USDC so redeem works
+      await usdc.transfer(
+        await vbUsdc.getAddress(),
+        withdrawQuantityInAssetUnits,
+      );
+
+      const forwarderAddress = await forwarder.getAddress();
+      const exchangeLayerZeroAdapterAddress =
+        await stargatePoolMock.getAddress();
+
+      // Build withdrawal compose message
+      const composeMessage = buildComposeMessage(
+        withdrawQuantityInAssetUnits,
+        exchangeLayerZeroAdapterAddress, // composeFrom = exchangeLayerZeroAdapter
+        ethers.AbiCoder.defaultAbiCoder().encode(
+          ['uint8', 'tuple(uint32,address)'],
+          [
+            1, // ComposeMessageType.WithdrawFromKatana
+            [
+              ethereumEndpointId, // destinationEndpointId
+              traderWallet.address, // destinationWallet
+            ],
+          ],
+        ),
+      );
+
+      // Mint vbUSDC to the forwarder (simulating tokens arriving from Katana)
+      await usdc.approve(
+        await vbUsdc.getAddress(),
+        withdrawQuantityInAssetUnits,
+      );
+      await vbUsdc.deposit(withdrawQuantityInAssetUnits, forwarderAddress);
+
+      const traderVbUsdcBefore = await vbUsdc.balanceOf(traderWallet.address);
+      const startBlock = await ethers.provider.getBlockNumber();
+
+      // Call lzCompose - slippage check will fail
+      await stargatePoolMock.lzCompose(
+        forwarderAddress,
+        await vbUsdcOftAdapterMock.getAddress(), // from = vbUSDCOFTAdapter
+        ethers.randomBytes(32),
+        composeMessage,
+        await stargatePoolMock.getAddress(),
+        '0x',
+      );
+
+      // Assert ForwardFailed event was emitted
+      const forwardFailedEvents = await forwarder.queryFilter(
+        forwarder.filters.ForwardFailed(),
+        startBlock + 1,
+      );
+      expect(forwardFailedEvents).to.have.lengthOf(1);
+      expect(forwardFailedEvents[0].args.destinationWallet).to.equal(
+        traderWallet.address,
+      );
+      expect(forwardFailedEvents[0].args.quantity).to.equal(
+        withdrawQuantityInAssetUnits,
+      );
+      // Verify errorData encodes the expected error string
+      expect(
+        Buffer.from(
+          forwardFailedEvents[0].args.errorData.substring(2),
+          'hex',
+        ).toString('utf8'),
+      ).to.match(/slippage exceeded/i);
+
+      // Assert vbUSDC was transferred to destinationWallet (traderWallet) as failsafe
+      const traderVbUsdcAfter = await vbUsdc.balanceOf(traderWallet.address);
+      expect(traderVbUsdcAfter - traderVbUsdcBefore).to.equal(
+        withdrawQuantityInAssetUnits,
+      );
+    });
+
+    it('should emit ForwardFailed and transfer USDC to destinationWallet when Stargate send fails', async () => {
+      const nonEthereumEndpointId = 12345; // Different from ethereumEndpointId to use Stargate path
+
+      // Disable send on stargatePoolMock to trigger the send failure fallback
+      await stargatePoolMock.setSendDisabled(true);
+
+      // Fund the vbUSDC vault with USDC so redeem works
+      await usdc.transfer(
+        await vbUsdc.getAddress(),
+        withdrawQuantityInAssetUnits,
+      );
+
+      const forwarderAddress = await forwarder.getAddress();
+      const exchangeLayerZeroAdapterAddress =
+        await stargatePoolMock.getAddress();
+
+      // Build withdrawal compose message with non-Ethereum destination (to use Stargate path)
+      const composeMessage = buildComposeMessage(
+        withdrawQuantityInAssetUnits,
+        exchangeLayerZeroAdapterAddress, // composeFrom = exchangeLayerZeroAdapter
+        ethers.AbiCoder.defaultAbiCoder().encode(
+          ['uint8', 'tuple(uint32,address)'],
+          [
+            1, // ComposeMessageType.WithdrawFromKatana
+            [
+              nonEthereumEndpointId, // destinationEndpointId (not Ethereum, so uses Stargate)
+              traderWallet.address, // destinationWallet
+            ],
+          ],
+        ),
+      );
+
+      // Mint vbUSDC to the forwarder (simulating tokens arriving from Katana)
+      await usdc.approve(
+        await vbUsdc.getAddress(),
+        withdrawQuantityInAssetUnits,
+      );
+      await vbUsdc.deposit(withdrawQuantityInAssetUnits, forwarderAddress);
+
+      const traderUsdcBefore = await usdc.balanceOf(traderWallet.address);
+      const startBlock = await ethers.provider.getBlockNumber();
+
+      // Call lzCompose - Stargate send will fail and trigger fallback
+      await stargatePoolMock.lzCompose(
+        forwarderAddress,
+        await vbUsdcOftAdapterMock.getAddress(), // from = vbUSDCOFTAdapter
+        ethers.randomBytes(32),
+        composeMessage,
+        await stargatePoolMock.getAddress(),
+        '0x',
+      );
+
+      // Assert ForwardFailed event was emitted
+      const forwardFailedEvents = await forwarder.queryFilter(
+        forwarder.filters.ForwardFailed(),
+        startBlock + 1,
+      );
+      expect(forwardFailedEvents).to.have.lengthOf(1);
+      expect(forwardFailedEvents[0].args.destinationWallet).to.equal(
+        traderWallet.address,
+      );
+      // Quantity is the USDC amount after redeem (same as vbUSDC amount for 1:1 ratio)
+      expect(forwardFailedEvents[0].args.quantity).to.equal(
+        withdrawQuantityInAssetUnits,
+      );
+      // Verify errorData encodes the expected error string "Send disabled"
+      expect(
+        Buffer.from(
+          forwardFailedEvents[0].args.errorData.substring(2),
+          'hex',
+        ).toString('utf8'),
+      ).to.match(/send disabled/i);
+
+      // Assert USDC was transferred to destinationWallet (traderWallet) as failsafe
+      const traderUsdcAfter = await usdc.balanceOf(traderWallet.address);
+      expect(traderUsdcAfter - traderUsdcBefore).to.equal(
         withdrawQuantityInAssetUnits,
       );
     });

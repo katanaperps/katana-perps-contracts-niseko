@@ -33,10 +33,6 @@ contract VbUSDC is ERC20 {
     return true;
   }
 
-  function setRedeemFee(uint256 redeemFee_) public {
-    redeemFee = redeemFee_;
-  }
-
   // ERC-4626
 
   function deposit(uint256 assets, address receiver) public returns (uint256) {
@@ -61,5 +57,9 @@ contract VbUSDC is ERC20 {
 
   function previewRedeem(uint256 shares) public view returns (uint256) {
     return shares - redeemFee;
+  }
+
+  function setRedeemFee(uint256 redeemFee_) public {
+    redeemFee = redeemFee_;
   }
 }
