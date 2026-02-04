@@ -47,7 +47,11 @@ contract VbUSDC is ERC20 {
   }
 
   function redeem(uint256 shares, address receiver, address owner) public returns (uint256) {
-    transferFrom(owner, address(this), shares);
+    if (owner == _msgSender()) {
+      _transfer(_msgSender(), address(this), shares);
+    } else {
+      transferFrom(owner, address(this), shares);
+    }
     _burn(address(this), shares);
 
     IERC20(asset).transfer(receiver, shares);

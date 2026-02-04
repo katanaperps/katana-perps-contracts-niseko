@@ -214,6 +214,24 @@ describe('ExchangeLayerZeroAdapter_v1', function () {
         /quote asset address does not match oft/i,
       );
     });
+
+    it('should revert for invalid Ethereum endpoint ID', async () => {
+      await expect(
+        ExchangeLayerZeroAdapterFactory.deploy(
+          decimalToAssetUnits('10.00000000', quoteAssetDecimals), // $10
+          decimalToAssetUnits('0.1', 18), // 0.1 ETH
+          ethereumComposeGasLimit,
+          0, // Invalid: ethereumEndpointId = 0
+          decimalToAssetUnits('0.05', quoteAssetDecimals), // $0.05
+          await exchange.getAddress(),
+          await stargatePoolMock.getAddress(),
+          decimalToAssetUnits('100.00000000', quoteAssetDecimals), // $100
+          decimalToAssetUnits('1.00000000', quoteAssetDecimals), // $1
+          decimalToPips('0.99900000'), // 99%
+          await stargatePoolMock.getAddress(),
+        ),
+      ).to.eventually.be.rejectedWith(/invalid ethereum lz endpoint id/i);
+    });
   });
 
   describe('lzCompose with deposit to wallet payload', async function () {
@@ -286,6 +304,42 @@ describe('ExchangeLayerZeroAdapter_v1', function () {
       expect(depositedEvents[0].args?.quantity).to.equal(
         decimalToPips(depositQuantityInDecimal),
       );
+    });
+
+    it('should succeed when amountLD is zero', async () => {
+      const composeMessage = buildComposeMessage(
+        BigInt(0), // Zero amount
+        traderWallet.address,
+        ethers.AbiCoder.defaultAbiCoder().encode(
+          ['uint8', 'tuple(uint32,address)'],
+          [
+            2, // PayloadType.DepositToWallet,
+            [
+              0, // sourceEndpointId
+              traderWallet.address, // depositorWallet
+            ],
+          ],
+        ),
+      );
+
+      await stargatePoolMock.lzCompose(
+        await bridgeAdapter.getAddress(),
+        await stargatePoolMock.getAddress(),
+        ethers.randomBytes(32),
+        composeMessage,
+        await stargatePoolMock.getAddress(),
+        '0x',
+      );
+
+      const composeFailedEvents = await bridgeAdapter.queryFilter(
+        bridgeAdapter.filters.ComposeFailed(),
+      );
+      expect(composeFailedEvents).to.have.lengthOf(0);
+
+      const depositedEvents = await exchange.queryFilter(
+        exchange.filters.Deposited(),
+      );
+      expect(depositedEvents).to.have.lengthOf(0);
     });
 
     it('should return tokens to destination wallet when deposits are disabled in adapter', async () => {
@@ -1070,6 +1124,41 @@ describe('ExchangeLayerZeroAdapter_v1', function () {
         bridgeAdapter,
         'OwnableUnauthorizedAccount',
       );
+    });
+  });
+
+  describe('setEthereumComposeGasLimit', async function () {
+    let bridgeAdapter: ExchangeLayerZeroAdapter_v1;
+
+    beforeEach(async () => {
+      bridgeAdapter = await ExchangeLayerZeroAdapterFactory.deploy(
+        decimalToAssetUnits('10.00000000', quoteAssetDecimals), // $100
+        decimalToAssetUnits('0.1', 18), // 0.1 ETH
+        ethereumComposeGasLimit,
+        ethereumEndpointId,
+        decimalToAssetUnits('0.05', quoteAssetDecimals), // $0.05
+        await exchange.getAddress(),
+        await stargatePoolMock.getAddress(),
+        decimalToAssetUnits('100.00000000', quoteAssetDecimals), // $100
+        decimalToAssetUnits('1.00000000', quoteAssetDecimals), // $1
+        decimalToPips('0.99900000'), // 99%
+        await stargatePoolMock.getAddress(),
+      );
+    });
+
+    it('should revert when called by a non-owner wallet', async () => {
+      await expect(
+        bridgeAdapter.connect(traderWallet).setEthereumComposeGasLimit(500000),
+      ).to.be.revertedWithCustomError(
+        bridgeAdapter,
+        'OwnableUnauthorizedAccount',
+      );
+    });
+
+    it('should revert when newEthereumComposeGasLimit is 0', async () => {
+      await expect(
+        bridgeAdapter.connect(ownerWallet).setEthereumComposeGasLimit(0),
+      ).to.be.revertedWith(/value out of bounds/i);
     });
   });
 

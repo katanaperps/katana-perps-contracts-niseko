@@ -19,7 +19,7 @@ const ethereumEndpointId = 9999999;
 const katanaEndpointId = 88888888;
 const katanaComposeGasLimit = 1000000;
 
-describe.only('KatanaPerpsStargateForwarder_v1', function () {
+describe('KatanaPerpsStargateForwarder_v1', function () {
   let forwarder: KatanaPerpsStargateForwarder_v1;
   let ownerWallet: SignerWithAddress;
   let stargatePoolMock: StargateV2PoolMock;
@@ -76,6 +76,33 @@ describe.only('KatanaPerpsStargateForwarder_v1', function () {
   });
 
   describe('deploy', function () {
+    it('reverts when ethereumEndpointId_ is zero', async () => {
+      const ForwarderFactory = await ethers.getContractFactory(
+        'KatanaPerpsStargateForwarder_v1',
+        {
+          libraries: {
+            KatanaPerpsStargateForwarderComposing_v1: forwarderComposingAddress,
+          },
+        },
+      );
+
+      await expect(
+        ForwarderFactory.deploy(
+          0, // Invalid: ethereumEndpointId = 0
+          await stargatePoolMock.getAddress(),
+          katanaComposeGasLimit,
+          katanaEndpointId,
+          await stargatePoolMock.getAddress(),
+          decimalToPips('0.99900000'),
+          decimalToPips('0.80000000'),
+          await stargatePoolMock.getAddress(),
+          await usdc.getAddress(),
+          await vbUsdc.getAddress(),
+          await vbUsdcOftAdapterMock.getAddress(),
+        ),
+      ).to.be.revertedWith(/invalid ethereum lz endpoint id/i);
+    });
+
     it('reverts when exchangeLayerZeroAdapter_ is zero', async () => {
       const ForwarderFactory = await ethers.getContractFactory(
         'KatanaPerpsStargateForwarder_v1',
@@ -210,6 +237,189 @@ describe.only('KatanaPerpsStargateForwarder_v1', function () {
         ),
       ).to.be.revertedWith(/invalid USDC token address/i);
     });
+
+    it('reverts when katanaEndpointId_ is zero', async () => {
+      const ForwarderFactory = await ethers.getContractFactory(
+        'KatanaPerpsStargateForwarder_v1',
+        {
+          libraries: {
+            KatanaPerpsStargateForwarderComposing_v1: forwarderComposingAddress,
+          },
+        },
+      );
+
+      await expect(
+        ForwarderFactory.deploy(
+          ethereumEndpointId,
+          await stargatePoolMock.getAddress(),
+          katanaComposeGasLimit,
+          0, // Invalid: katanaEndpointId = 0
+          await stargatePoolMock.getAddress(),
+          decimalToPips('0.99900000'),
+          decimalToPips('0.80000000'),
+          await stargatePoolMock.getAddress(),
+          await usdc.getAddress(),
+          await vbUsdc.getAddress(),
+          await vbUsdcOftAdapterMock.getAddress(),
+        ),
+      ).to.be.revertedWith(/invalid katana lz endpoint id/i);
+    });
+
+    it('reverts when katanaEndpointId_ equals ethereumEndpointId_', async () => {
+      const ForwarderFactory = await ethers.getContractFactory(
+        'KatanaPerpsStargateForwarder_v1',
+        {
+          libraries: {
+            KatanaPerpsStargateForwarderComposing_v1: forwarderComposingAddress,
+          },
+        },
+      );
+
+      await expect(
+        ForwarderFactory.deploy(
+          ethereumEndpointId,
+          await stargatePoolMock.getAddress(),
+          katanaComposeGasLimit,
+          ethereumEndpointId, // Invalid: same as ethereumEndpointId_
+          await stargatePoolMock.getAddress(),
+          decimalToPips('0.99900000'),
+          decimalToPips('0.80000000'),
+          await stargatePoolMock.getAddress(),
+          await usdc.getAddress(),
+          await vbUsdc.getAddress(),
+          await vbUsdcOftAdapterMock.getAddress(),
+        ),
+      ).to.be.revertedWith(/invalid katana lz endpoint id/i);
+    });
+
+    it('reverts when stargate_.token() does not match usdc_', async () => {
+      const ForwarderFactory = await ethers.getContractFactory(
+        'KatanaPerpsStargateForwarder_v1',
+        {
+          libraries: {
+            KatanaPerpsStargateForwarderComposing_v1: forwarderComposingAddress,
+          },
+        },
+      );
+
+      // Create a new USDC that doesn't match the stargate pool's token
+      const mismatchedUsdc = await (
+        await ethers.getContractFactory('USDC')
+      ).deploy();
+
+      await expect(
+        ForwarderFactory.deploy(
+          ethereumEndpointId,
+          await stargatePoolMock.getAddress(),
+          katanaComposeGasLimit,
+          katanaEndpointId,
+          await stargatePoolMock.getAddress(),
+          decimalToPips('0.99900000'),
+          decimalToPips('0.80000000'),
+          await stargatePoolMock.getAddress(),
+          await mismatchedUsdc.getAddress(), // Doesn't match stargate_.token()
+          await vbUsdc.getAddress(),
+          await vbUsdcOftAdapterMock.getAddress(),
+        ),
+      ).to.be.revertedWith(/usdc token address does not match stargate/i);
+    });
+
+    it('reverts when vbUSDC_ is not a valid contract address', async () => {
+      const ForwarderFactory = await ethers.getContractFactory(
+        'KatanaPerpsStargateForwarder_v1',
+        {
+          libraries: {
+            KatanaPerpsStargateForwarderComposing_v1: forwarderComposingAddress,
+          },
+        },
+      );
+
+      await expect(
+        ForwarderFactory.deploy(
+          ethereumEndpointId,
+          await stargatePoolMock.getAddress(),
+          katanaComposeGasLimit,
+          katanaEndpointId,
+          await stargatePoolMock.getAddress(),
+          decimalToPips('0.99900000'),
+          decimalToPips('0.80000000'),
+          await stargatePoolMock.getAddress(),
+          await usdc.getAddress(),
+          ownerWallet.address, // Invalid: not a contract
+          await vbUsdcOftAdapterMock.getAddress(),
+        ),
+      ).to.be.revertedWith(/invalid vbusdc token address/i);
+    });
+
+    it('reverts when vbUSDC_.asset() does not match usdc_', async () => {
+      const ForwarderFactory = await ethers.getContractFactory(
+        'KatanaPerpsStargateForwarder_v1',
+        {
+          libraries: {
+            KatanaPerpsStargateForwarderComposing_v1: forwarderComposingAddress,
+          },
+        },
+      );
+
+      // Create a vbUSDC with a different underlying asset
+      const differentUsdc = await (
+        await ethers.getContractFactory('USDC')
+      ).deploy();
+      const mismatchedVbUsdc = await (
+        await ethers.getContractFactory('VbUSDC')
+      ).deploy(await differentUsdc.getAddress());
+
+      await expect(
+        ForwarderFactory.deploy(
+          ethereumEndpointId,
+          await stargatePoolMock.getAddress(),
+          katanaComposeGasLimit,
+          katanaEndpointId,
+          await stargatePoolMock.getAddress(),
+          decimalToPips('0.99900000'),
+          decimalToPips('0.80000000'),
+          await stargatePoolMock.getAddress(),
+          await usdc.getAddress(),
+          await mismatchedVbUsdc.getAddress(), // vbUSDC_.asset() != usdc_
+          await vbUsdcOftAdapterMock.getAddress(),
+        ),
+      ).to.be.revertedWith(/vbusdc asset address does not match usdc/i);
+    });
+
+    it('reverts when vbUSDCOFTAdapter_.token() does not match vbUSDC_', async () => {
+      const ForwarderFactory = await ethers.getContractFactory(
+        'KatanaPerpsStargateForwarder_v1',
+        {
+          libraries: {
+            KatanaPerpsStargateForwarderComposing_v1: forwarderComposingAddress,
+          },
+        },
+      );
+
+      // Create a vbUSDC OFT adapter that points to a different token
+      const differentVbUsdc = await (
+        await ethers.getContractFactory('VbUSDC')
+      ).deploy(await usdc.getAddress());
+      const mismatchedOftAdapter = await (
+        await ethers.getContractFactory('StargateV2PoolMock')
+      ).deploy(0, 0, await differentVbUsdc.getAddress());
+
+      await expect(
+        ForwarderFactory.deploy(
+          ethereumEndpointId,
+          await stargatePoolMock.getAddress(),
+          katanaComposeGasLimit,
+          katanaEndpointId,
+          await stargatePoolMock.getAddress(),
+          decimalToPips('0.99900000'),
+          decimalToPips('0.80000000'),
+          await stargatePoolMock.getAddress(),
+          await usdc.getAddress(),
+          await vbUsdc.getAddress(),
+          await mismatchedOftAdapter.getAddress(), // token() != vbUSDC_
+        ),
+      ).to.be.revertedWith(/vbusdc token address does not match oft adapter/i);
+    });
   });
 
   describe('lzCompose ', function () {
@@ -325,6 +535,231 @@ describe.only('KatanaPerpsStargateForwarder_v1', function () {
         ),
       );
     });
+
+    it('should succeed with valid arguments and forward deposit to Katana', async () => {
+      // Transfer USDC to the forwarder (simulating bridged tokens arriving)
+      await usdc.transfer(
+        await forwarder.getAddress(),
+        depositQuantityInAssetUnits,
+      );
+
+      const forwarderAddress = await forwarder.getAddress();
+      const vbUsdcAddress = await vbUsdc.getAddress();
+      const vbUsdcOftAdapterAddress = await vbUsdcOftAdapterMock.getAddress();
+
+      // Record balances before
+      const vbUsdcVaultUsdcBefore = await usdc.balanceOf(vbUsdcAddress);
+      const oftAdapterVbUsdcBefore = await vbUsdc.balanceOf(
+        vbUsdcOftAdapterAddress,
+      );
+
+      const startBlock = await ethers.provider.getBlockNumber();
+
+      // Call lzCompose via the stargate mock (simulating LZ endpoint callback)
+      await stargatePoolMock.lzCompose(
+        await forwarder.getAddress(),
+        await stargatePoolMock.getAddress(), // from = stargate
+        ethers.randomBytes(32),
+        composeMessage,
+        await stargatePoolMock.getAddress(),
+        '0x',
+      );
+
+      // Assert no ForwardFailed event was emitted
+      const forwardFailedEvents = await forwarder.queryFilter(
+        forwarder.filters.ForwardFailed(),
+        startBlock + 1,
+      );
+      expect(forwardFailedEvents).to.have.lengthOf(0);
+
+      // Assert forwarder USDC balance is now 0 (deposited to vault)
+      const forwarderUsdcAfter = await usdc.balanceOf(forwarderAddress);
+      expect(forwarderUsdcAfter).to.equal(0);
+
+      // Assert vbUSDC vault received the USDC
+      const vbUsdcVaultUsdcAfter = await usdc.balanceOf(vbUsdcAddress);
+      expect(vbUsdcVaultUsdcAfter - vbUsdcVaultUsdcBefore).to.equal(
+        depositQuantityInAssetUnits,
+      );
+
+      // Assert forwarder vbUSDC balance is 0 (sent via OFT adapter)
+      const forwarderVbUsdcAfter = await vbUsdc.balanceOf(forwarderAddress);
+      expect(forwarderVbUsdcAfter).to.equal(0);
+
+      // Assert OFT adapter received the vbUSDC (via send call)
+      const oftAdapterVbUsdcAfter = await vbUsdc.balanceOf(
+        vbUsdcOftAdapterAddress,
+      );
+      // vbUSDC shares minted should equal USDC deposited (1:1 initially)
+      expect(oftAdapterVbUsdcAfter - oftAdapterVbUsdcBefore).to.equal(
+        depositQuantityInAssetUnits,
+      );
+    });
+  });
+
+  describe('lzCompose with withdrawal payload', function () {
+    const withdrawQuantityInDecimal = '5.00000000';
+    const withdrawQuantityInAssetUnits = ethers.parseUnits(
+      withdrawQuantityInDecimal,
+      quoteAssetDecimals,
+    );
+
+    it('should succeed with valid arguments and forward withdrawal to Ethereum', async () => {
+      // Fund the vbUSDC vault with USDC so redeem works
+      await usdc.transfer(
+        await vbUsdc.getAddress(),
+        withdrawQuantityInAssetUnits,
+      );
+
+      const forwarderAddress = await forwarder.getAddress();
+      const exchangeLayerZeroAdapterAddress =
+        await stargatePoolMock.getAddress();
+
+      // Build withdrawal compose message with Ethereum as destination
+      const composeMessage = buildComposeMessage(
+        withdrawQuantityInAssetUnits,
+        exchangeLayerZeroAdapterAddress, // composeFrom = exchangeLayerZeroAdapter
+        ethers.AbiCoder.defaultAbiCoder().encode(
+          ['uint8', 'tuple(uint32,address)'],
+          [
+            1, // ComposeMessageType.WithdrawFromKatana
+            [
+              ethereumEndpointId, // destinationEndpointId
+              traderWallet.address, // destinationWallet
+            ],
+          ],
+        ),
+      );
+
+      // Mint vbUSDC to the forwarder (simulating tokens arriving from Katana)
+      await usdc.approve(
+        await vbUsdc.getAddress(),
+        withdrawQuantityInAssetUnits,
+      );
+      await vbUsdc.deposit(
+        withdrawQuantityInAssetUnits,
+        await forwarder.getAddress(),
+      );
+
+      // Record balances before
+      const traderUsdcBefore = await usdc.balanceOf(traderWallet.address);
+
+      const startBlock = await ethers.provider.getBlockNumber();
+
+      // Call lzCompose via stargatePoolMock (lzEndpoint) with from = vbUSDCOFTAdapter
+      await stargatePoolMock.lzCompose(
+        forwarderAddress,
+        await vbUsdcOftAdapterMock.getAddress(), // from = vbUSDCOFTAdapter
+        ethers.randomBytes(32),
+        composeMessage,
+        await stargatePoolMock.getAddress(),
+        '0x',
+      );
+
+      // Assert no ForwardFailed event was emitted
+      const forwardFailedEvents = await forwarder.queryFilter(
+        forwarder.filters.ForwardFailed(),
+        startBlock + 1,
+      );
+      expect(forwardFailedEvents).to.have.lengthOf(0);
+
+      // Assert forwarder vbUSDC balance is 0 (redeemed for USDC)
+      const forwarderVbUsdcAfter = await vbUsdc.balanceOf(forwarderAddress);
+      expect(forwarderVbUsdcAfter).to.equal(0);
+
+      // Assert trader received USDC directly (Ethereum endpoint = direct transfer)
+      const traderUsdcAfter = await usdc.balanceOf(traderWallet.address);
+      expect(traderUsdcAfter - traderUsdcBefore).to.equal(
+        withdrawQuantityInAssetUnits,
+      );
+    });
+
+    it('should succeed with valid arguments and forward withdrawal via Stargate to non-Ethereum chain', async () => {
+      const nonEthereumEndpointId = 12345; // Different from ethereumEndpointId
+
+      // Fund the vbUSDC vault with USDC so redeem works
+      await usdc.transfer(
+        await vbUsdc.getAddress(),
+        withdrawQuantityInAssetUnits,
+      );
+
+      // Mint vbUSDC to the forwarder (simulating tokens arriving from Katana)
+      await usdc.approve(
+        await vbUsdc.getAddress(),
+        withdrawQuantityInAssetUnits,
+      );
+      await vbUsdc.deposit(
+        withdrawQuantityInAssetUnits,
+        await forwarder.getAddress(),
+      );
+
+      const forwarderAddress = await forwarder.getAddress();
+      const exchangeLayerZeroAdapterAddress =
+        await stargatePoolMock.getAddress();
+      const stargateAddress = await stargatePoolMock.getAddress();
+
+      // Build withdrawal compose message with non-Ethereum destination
+      const composeMessage = buildComposeMessage(
+        withdrawQuantityInAssetUnits,
+        exchangeLayerZeroAdapterAddress, // composeFrom = exchangeLayerZeroAdapter
+        ethers.AbiCoder.defaultAbiCoder().encode(
+          ['uint8', 'tuple(uint32,address)'],
+          [
+            1, // ComposeMessageType.WithdrawFromKatana
+            [
+              nonEthereumEndpointId, // destinationEndpointId (not Ethereum)
+              traderWallet.address, // destinationWallet
+            ],
+          ],
+        ),
+      );
+
+      // Record balances before
+      const stargateUsdcBefore = await usdc.balanceOf(stargateAddress);
+
+      const startBlock = await ethers.provider.getBlockNumber();
+
+      // Call lzCompose via stargatePoolMock (lzEndpoint) with from = vbUSDCOFTAdapter
+      await stargatePoolMock.lzCompose(
+        await forwarder.getAddress(),
+        await vbUsdcOftAdapterMock.getAddress(), // from = vbUSDCOFTAdapter
+        ethers.randomBytes(32),
+        composeMessage,
+        await stargatePoolMock.getAddress(),
+        '0x',
+      );
+
+      // Assert no ForwardFailed event was emitted
+      const forwardFailedEvents = await forwarder.queryFilter(
+        forwarder.filters.ForwardFailed(),
+        startBlock + 1,
+      );
+      expect(forwardFailedEvents).to.have.lengthOf(0);
+
+      // Assert forwarder vbUSDC balance is 0 (redeemed for USDC)
+      const forwarderVbUsdcAfter = await vbUsdc.balanceOf(forwarderAddress);
+      expect(forwarderVbUsdcAfter).to.equal(0);
+
+      // Assert Stargate received USDC (via send call for bridging)
+      const stargateUsdcAfter = await usdc.balanceOf(stargateAddress);
+      expect(stargateUsdcAfter - stargateUsdcBefore).to.equal(
+        withdrawQuantityInAssetUnits,
+      );
+    });
+  });
+
+  describe('setKatanaComposeGasLimit', function () {
+    it('reverts when caller is not the Owner wallet', async () => {
+      await expect(
+        forwarder.connect(traderWallet).setKatanaComposeGasLimit(500000),
+      ).to.be.revertedWithCustomError(forwarder, 'OwnableUnauthorizedAccount');
+    });
+
+    it('reverts when newKatanaComposeGasLimit is 0', async () => {
+      await expect(forwarder.setKatanaComposeGasLimit(0)).to.be.revertedWith(
+        /value out of bounds/i,
+      );
+    });
   });
 
   describe('setMinimumDepositNativeDropQuantityMultiplier', function () {
@@ -399,7 +834,7 @@ describe.only('KatanaPerpsStargateForwarder_v1', function () {
 
       const [estimated, minimum, poolDecimals] =
         await forwarder.loadEstimatedForwardedQuantityInAssetUnits(
-          3, // katanaEndpointId
+          katanaEndpointId,
           quantityPips,
         );
 
