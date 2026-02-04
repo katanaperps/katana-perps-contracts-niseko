@@ -99,6 +99,7 @@ contract KatanaPerpsStargateForwarder_v1 is ILayerZeroComposer, Ownable2Step {
     vbUSDCOFTAdapter = IOFT(vbUSDCOFTAdapter_);
 
     require(Address.isContract(vbUSDC_), "Invalid vbUSDC token address");
+    require(IERC4626(vbUSDC_).asset() == usdc_, "vbUSDC asset address does not match USDC");
     require(IOFT(vbUSDCOFTAdapter_).token() == vbUSDC_, "vbUSDC token address does not match OFT Adapter");
     vbUSDC = IERC4626(vbUSDC_);
 
