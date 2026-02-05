@@ -9,6 +9,6 @@ module.exports = {
     'test/',
     'util/ExchangeWalletStateAggregator.sol',
     'bridge-adapters/ExchangeLayerZeroAdapter_v1.sol',
-    'bridge-adapters/libraries/ ExchangeAdapterComposing_v1.sol',
+    'bridge-adapters/libraries/ExchangeAdapterComposing_v1.sol',
   ],
 };
