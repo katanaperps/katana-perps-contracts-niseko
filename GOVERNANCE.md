@@ -133,6 +133,12 @@ These settings have the initial values below but are changeable in the contract 
 The Exchange contract integrates with an extensible set of bridge adapter contracts (BACs). BACs contain the necessary logic to support seamless cross-chain deposits and withdrawal via bridge protocols.
 
 - A whitelist defines the supported BAC addresses, and the admin can update the whitelist according to [Governance’s](#governance-contract) field update logic.
+- BACs use a single owner model with a 2-step update process. In these contracts, the owner is authorized to make the changes noted below.
+- BACs implement controls for enabling and disabling deposits and withdrawals, and the owner can change either setting with no delay.
+- The owner can withdraw the native asset, used by some protocols for additional fee settlement, with no delay.
+- Some BACs implement a configurable slippage multiplier, which the owner can change with no delay.
+- Some BACs implement configurable compose parameters, which the owner can change with no delay.
+- Some parameter fields are subject to validation for safety.
 
 ### Fixed Parameter Settings
 
@@ -140,6 +146,10 @@ These settings have been pre-determined and may be hard-coded or implicit in the
 
 - Owner Change Period: immediate
 - Admin Change Period: immediate
+- Deposit Change Period: immediate
+- Withdrawal Change Period: immediate
+- Slippage Change Period: immediate.
+- Compose Parameter Change Period: immediate.
 
 ## Index and Oracle Price Adapter Contracts
 
