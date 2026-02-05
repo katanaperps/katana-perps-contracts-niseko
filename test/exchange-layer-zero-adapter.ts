@@ -1255,10 +1255,7 @@ describe('ExchangeLayerZeroAdapter_v1', function () {
         BigInt(oftTokenFee);
 
       const [estimated, minimum, poolDecimals] =
-        await bridgeAdapter.estimateWithdrawQuantityInAssetUnits(
-          ethereumEndpointId,
-          quantityPips,
-        );
+        await bridgeAdapter.estimateWithdrawQuantityInAssetUnits(quantityPips);
 
       expect(poolDecimals).to.equal(quoteAssetDecimals);
       expect(minimum).to.equal(BigInt(99900000));

@@ -603,6 +603,10 @@ describe('KatanaPerpsStargateForwarder_v1', function () {
         depositQuantityInAssetUnits,
       );
 
+      const otherStargatePoolMock = await (
+        await ethers.getContractFactory('StargateV2PoolMock')
+      ).deploy(0, 0, await usdc.getAddress());
+
       const ownerAddress = await forwarder.owner();
       const ownerUsdcBefore = await usdc.balanceOf(ownerAddress);
       const startBlock = await ethers.provider.getBlockNumber();
@@ -610,7 +614,7 @@ describe('KatanaPerpsStargateForwarder_v1', function () {
       // Call lzCompose with wrong from address (not stargate)
       await stargatePoolMock.lzCompose(
         await forwarder.getAddress(),
-        traderWallet.address, // Wrong: should be stargatePoolMock address
+        await otherStargatePoolMock.getAddress(), // Wrong: should be stargatePoolMock address
         ethers.randomBytes(32),
         composeMessage,
         await stargatePoolMock.getAddress(),
@@ -943,6 +947,10 @@ describe('KatanaPerpsStargateForwarder_v1', function () {
       );
       await vbUsdc.deposit(withdrawQuantityInAssetUnits, forwarderAddress);
 
+      const otherStargatePoolMock = await (
+        await ethers.getContractFactory('StargateV2PoolMock')
+      ).deploy(0, 0, await vbUsdc.getAddress());
+
       const ownerAddress = await forwarder.owner();
       const ownerVbUsdcBefore = await vbUsdc.balanceOf(ownerAddress);
       const startBlock = await ethers.provider.getBlockNumber();
@@ -950,7 +958,7 @@ describe('KatanaPerpsStargateForwarder_v1', function () {
       // Call lzCompose with wrong from address (not vbUSDCOFTAdapter)
       await stargatePoolMock.lzCompose(
         forwarderAddress,
-        traderWallet.address, // Wrong: should be vbUsdcOftAdapterMock address
+        await otherStargatePoolMock.getAddress(), // Wrong: should be vbUsdcOftAdapterMock address
         ethers.randomBytes(32),
         composeMessage,
         await stargatePoolMock.getAddress(),

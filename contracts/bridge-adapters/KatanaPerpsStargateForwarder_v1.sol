@@ -155,13 +155,7 @@ contract KatanaPerpsStargateForwarder_v1 is ILayerZeroComposer, Ownable2Step {
         _message
       )
     {} catch (bytes memory errorData) {
-      if (OFTComposeMsgCodec.srcEid(_message) == katanaEndpointId) {
-        // Withdrawals from Katana will always be vbUSDC
-        vbUSDC.transfer(owner(), amountLD);
-      } else {
-        // Deposits to Katana will always be USDC via Stargate
-        usdc.transfer(owner(), amountLD);
-      }
+      IERC20(IOFT(_from).token()).transfer(owner(), amountLD);
       emit ForwardFailed(address(0x0), amountLD, _message, errorData);
     }
   }
@@ -250,17 +244,14 @@ contract KatanaPerpsStargateForwarder_v1 is ILayerZeroComposer, Ownable2Step {
    * @notice Load current gas fee for depositing to Katana
    */
   function loadDepositGasFeeInAssetUnits() public view returns (uint256 gasFeeInAssetUnits) {
-    uint32[] memory destinationEndpointIds = new uint32[](1);
-    destinationEndpointIds[0] = katanaEndpointId;
-
     return
-      LayerZeroFeeEstimation.loadGasFeesInAssetUnits(
-        // Deposits include an enforced gas fee for composing on the Katana bridge adapter
+      LayerZeroFeeEstimation.loadSendAndComposeGasFeeInAssetUnits(
+        katanaComposeGasLimit,
         abi.encode(katanaEndpointId, address(this)),
-        destinationEndpointIds,
+        katanaEndpointId,
         minimumForwardQuantityMultiplier,
         vbUSDCOFTAdapter
-      )[0];
+      );
   }
 
   /**
@@ -272,8 +263,7 @@ contract KatanaPerpsStargateForwarder_v1 is ILayerZeroComposer, Ownable2Step {
     uint32[] calldata destinationEndpointIds
   ) public view returns (uint256[] memory gasFeesInAssetUnits) {
     return
-      LayerZeroFeeEstimation.loadGasFeesInAssetUnits(
-        bytes(""), // Compose not supported for withdrawals
+      LayerZeroFeeEstimation.loadSendGasFeesInAssetUnits(
         destinationEndpointIds,
         minimumForwardQuantityMultiplier,
         stargate

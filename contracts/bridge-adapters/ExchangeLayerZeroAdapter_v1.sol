@@ -299,12 +299,11 @@ contract ExchangeLayerZeroAdapter_v1 is BridgeAdapterEvents, ILayerZeroComposer,
   }
 
   /**
-   * @notice Estimate actual quantity of quote tokens that will be delivered on target chain after pool fees
+   * @notice Estimate actual quantity of quote tokens that will be delivered on Ethereum after pool fees
    *
    * @dev quantity is in pips since this function is used in conjunction with the off-chain SDK and REST API
    */
   function estimateWithdrawQuantityInAssetUnits(
-    uint32 destinationEndpointId,
     uint64 quantity
   )
     public
@@ -317,7 +316,7 @@ contract ExchangeLayerZeroAdapter_v1 is BridgeAdapterEvents, ILayerZeroComposer,
   {
     return
       LayerZeroFeeEstimation.loadEstimatedDeliveredQuantityInAssetUnits(
-        destinationEndpointId,
+        ethereumEndpointId,
         minimumWithdrawQuantityMultiplier,
         oft,
         quantity
@@ -328,20 +327,18 @@ contract ExchangeLayerZeroAdapter_v1 is BridgeAdapterEvents, ILayerZeroComposer,
    * @notice Load current gas fees for withdrawing to Ethereum
    */
   function loadEthereumWithdrawalGasFeeInAssetUnits() public view returns (uint256) {
-    uint32[] memory destinationEndpointIds = new uint32[](1);
-    destinationEndpointIds[0] = ethereumEndpointId;
-
     return
-      LayerZeroFeeEstimation.loadGasFeesInAssetUnits(
+      LayerZeroFeeEstimation.loadSendAndComposeGasFeeInAssetUnits(
+        ethereumComposeGasLimit,
         abi.encode(
           KatanaPerpsStargateForwarderComposing_v1.ComposeMessageType.WithdrawFromKatana,
           // The encoded destination endpoint and wallet values do not matter for estimation purposes
           KatanaPerpsStargateForwarderComposing_v1.WithdrawFromKatana(ethereumEndpointId, address(this))
         ),
-        destinationEndpointIds,
+        ethereumEndpointId,
         minimumWithdrawQuantityMultiplier,
         oft
-      )[0];
+      );
   }
 
   function _getSendParamForWithdraw(
