@@ -80,19 +80,18 @@ library KatanaPerpsStargateForwarderComposing_v1 {
     (, DepositToKatana memory depositToKatana) = abi.decode(composeMessage, (ComposeMessageType, DepositToKatana));
     address destinationWallet = depositToKatana.destinationWallet;
 
+    // Total slippage is validated below by setting minAmountLD in SendParam
+    uint256 minVbUsdcAmount = (arguments.amountLD * arguments.minimumForwardQuantityMultiplier) /
+      Constants.PIP_PRICE_MULTIPLIER;
     // Deposit USDC to the vault and receive vbUSDC
-    uint256 balanceBefore = arguments.vbUSDC.balanceOf(address(this));
-    arguments.vbUSDC.deposit(arguments.amountLD, address(this));
-    uint256 balanceAfter = arguments.vbUSDC.balanceOf(address(this));
-    // Slippage is validated below by setting minAmountLD in SendParam
-    uint256 vbUSDCAmountToSend = balanceAfter - balanceBefore;
+    uint256 vbUSDCAmount = arguments.vbUSDC.deposit(arguments.amountLD, address(this));
 
     // https://docs.layerzero.network/v2/developers/evm/oft/quickstart#estimating-gas-fees
     SendParam memory sendParam = SendParam({
       dstEid: arguments.katanaEndpointId,
       to: OFTComposeMsgCodec.addressToBytes32(arguments.exchangeLayerZeroAdapter),
-      amountLD: vbUSDCAmountToSend,
-      minAmountLD: (arguments.amountLD * arguments.minimumForwardQuantityMultiplier) / Constants.PIP_PRICE_MULTIPLIER,
+      amountLD: vbUSDCAmount,
+      minAmountLD: minVbUsdcAmount,
       extraOptions: OptionsBuilder.newOptions().addExecutorLzComposeOption(0, arguments.katanaComposeGasLimit, 0),
       composeMsg: depositToKatana.exchangeLayerZeroAdapterPayload,
       oftCmd: bytes("") // Not used
@@ -102,10 +101,10 @@ library KatanaPerpsStargateForwarderComposing_v1 {
     uint256 minimumNativeDrop = (messagingFee.nativeFee * arguments.minimumDepositNativeDropQuantityMultiplier) /
       Constants.PIP_PRICE_MULTIPLIER;
     if (msg.value < minimumNativeDrop) {
-      // If the depositor did not include enough native asset, transfer the token amount forwarded from the remote
-      // source chain to the destination wallet address on the local chain
-      arguments.vbUSDC.transfer(destinationWallet, vbUSDCAmountToSend);
-      emit ForwardFailed(destinationWallet, vbUSDCAmountToSend, composeMessage, "Insufficient native drop");
+      // If the depositor did not include enough native asset, transfer the converted vbUSDC amount
+      // to the destination wallet address on the local chain
+      arguments.vbUSDC.transfer(destinationWallet, vbUSDCAmount);
+      emit ForwardFailed(destinationWallet, vbUSDCAmount, composeMessage, "Insufficient native drop");
 
       return;
     }
@@ -114,10 +113,10 @@ library KatanaPerpsStargateForwarderComposing_v1 {
       // solhint-disable-next-line check-send-result
       arguments.vbUSDCOFTAdapter.send{ value: messagingFee.nativeFee }(sendParam, messagingFee, payable(address(this)))
     {} catch (bytes memory errorData) {
-      // If the send fails, transfer the token amount forwarded from the remote source chain to the destination
-      // wallet address on the local chain
-      arguments.vbUSDC.transfer(destinationWallet, vbUSDCAmountToSend);
-      emit ForwardFailed(destinationWallet, vbUSDCAmountToSend, composeMessage, errorData);
+      // If the send fails, transfer the converted vbUSDC amount to the destination wallet address on
+      // the local chain
+      arguments.vbUSDC.transfer(destinationWallet, vbUSDCAmount);
+      emit ForwardFailed(destinationWallet, vbUSDCAmount, composeMessage, errorData);
     }
   }
 
@@ -141,17 +140,26 @@ library KatanaPerpsStargateForwarderComposing_v1 {
       return;
     }
 
+    // If the destination endpoint ID is Ethereum then total slippage will not be asserted Stargate,
+    // preview and assert slippage from conversion to USDC here first
+    uint256 minUsdcAmount = (arguments.amountLD * arguments.minimumForwardQuantityMultiplier) /
+      Constants.PIP_PRICE_MULTIPLIER;
+    uint256 usdcAmount = arguments.vbUSDC.previewRedeem(arguments.amountLD);
+    if (usdcAmount < minUsdcAmount) {
+      // If slippage check fails then transfer the vbUSDC amount forwarded from Katana to the
+      // destination wallet address on the local chain
+      arguments.vbUSDC.transfer(destinationWallet, arguments.amountLD);
+      emit ForwardFailed(destinationWallet, arguments.amountLD, composeMessage, "Slippage exceeded");
+      return;
+    }
+
     // Redeem vbUSDC from vault and receive USDC
-    uint256 balanceBefore = arguments.usdc.balanceOf(address(this));
     arguments.vbUSDC.redeem(arguments.amountLD, address(this), address(this));
-    uint256 balanceAfter = arguments.usdc.balanceOf(address(this));
-    // Slippage is validated below by setting minAmountLD in SendParam
-    uint256 usdcAmountToSend = balanceAfter - balanceBefore;
 
     // If the destination endpoint ID is Ethereum then a second hop is not required, transfer USDC
     // directly to destination wallet
     if (withdrawFromKatana.destinationEndpointId == arguments.ethereumEndpointId) {
-      arguments.usdc.transfer(destinationWallet, usdcAmountToSend);
+      arguments.usdc.transfer(destinationWallet, usdcAmount);
       return;
     }
 
@@ -159,8 +167,9 @@ library KatanaPerpsStargateForwarderComposing_v1 {
     SendParam memory sendParam = SendParam({
       dstEid: withdrawFromKatana.destinationEndpointId,
       to: OFTComposeMsgCodec.addressToBytes32(destinationWallet),
-      amountLD: usdcAmountToSend,
-      minAmountLD: (arguments.amountLD * arguments.minimumForwardQuantityMultiplier) / Constants.PIP_PRICE_MULTIPLIER,
+      amountLD: usdcAmount,
+      // Assert total slippage including conversion to USDC
+      minAmountLD: minUsdcAmount,
       extraOptions: bytes(""),
       composeMsg: bytes(""), // Compose not supported on withdrawal
       oftCmd: bytes("") // Not used
@@ -172,10 +181,10 @@ library KatanaPerpsStargateForwarderComposing_v1 {
       // solhint-disable-next-line check-send-result
       arguments.stargate.send{ value: messagingFee.nativeFee }(sendParam, messagingFee, payable(address(this)))
     {} catch (bytes memory errorData) {
-      // If the send fails, transfer the token amount forwarded from the remote source chain to the
-      // destination wallet address on the local chain
-      arguments.usdc.transfer(destinationWallet, usdcAmountToSend);
-      emit ForwardFailed(destinationWallet, usdcAmountToSend, composeMessage, errorData);
+      // If the send fails, transfer the converted USDC amount to the destination wallet address on
+      // the local chain
+      arguments.usdc.transfer(destinationWallet, usdcAmount);
+      emit ForwardFailed(destinationWallet, usdcAmount, composeMessage, errorData);
     }
   }
 }
