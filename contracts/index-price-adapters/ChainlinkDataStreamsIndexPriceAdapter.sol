@@ -63,7 +63,7 @@ contract ChainlinkDataStreamsIndexPriceAdapter is IIndexPriceAdapter, Owned {
   IExchange public exchange;
   // Mapping of market base asset symbols to market structs
   mapping(string => ChainlinkDataStreamsMarket) public marketsByBaseAssetSymbol;
-  // Address of Chainling verifier contract
+  // Address of Chainlink verifier contract
   IVerifierProxy public immutable verifier;
 
   /**
@@ -132,6 +132,8 @@ contract ChainlinkDataStreamsIndexPriceAdapter is IIndexPriceAdapter, Owned {
     require(decimals <= 18, "Asset cannot have more than 18 decimals");
 
     require(feedId != bytes32(0x0), "Invalid feed ID");
+    // The first 2 bytes of the feed ID encode the report schema version
+    require(uint16(bytes2(feedId)) == 3, "Report version must be 3");
     require(!marketsByFeedId[feedId].exists, "Already added feed ID");
 
     require(bytes(baseAssetSymbol).length > 0, "Invalid base asset symbol");
@@ -196,7 +198,7 @@ contract ChainlinkDataStreamsIndexPriceAdapter is IIndexPriceAdapter, Owned {
     return
       IndexPrice({
         baseAssetSymbol: market.baseAssetSymbol,
-        timestampInMs: SafeCast.toUint64(report.validFromTimestamp),
+        timestampInMs: SafeCast.toUint64(report.validFromTimestamp) * 1000,
         price: priceInPips
       });
   }
