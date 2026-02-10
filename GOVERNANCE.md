@@ -33,6 +33,7 @@ The Governance contract also implements field update logic for sensitive Exchang
   - Insurance fund wallet address, provided that neither the existing nor new wallet has any open non-quote positions and the new wallet is not exited
   - Managed account provider contract address whitelist, provided existing addresses are not removed from the list
   - Market configuration override values, subject to limits as defined in Exchange contract’s [fixed parameter settings](#market-override-fixed-parameter-settings).
+    - Market configuration override values for the insurance fund wallet may also be executed by the Exchange admin.
   - Oracle price adapter contract address
 - Updating any of the governed fields is a two-step process.
   - The admin first calls an update initiation with the new value(s), which initiates the Field Update Period.
@@ -132,16 +133,12 @@ These settings have the initial values below but are changeable in the contract 
 The Exchange contract integrates with an extensible set of bridge adapter contracts (BACs). BACs contain the necessary logic to support seamless cross-chain deposits and withdrawal via bridge protocols.
 
 - A whitelist defines the supported BAC addresses, and the admin can update the whitelist according to [Governance’s](#governance-contract) field update logic.
-- Older BACs use an owner and admin model. In these contacts, the admin is authorized to make the changes noted below.
-  - These have a single owner, and the owner can be changed with no delay by the owner.
-  - These have a single admin, and the admin can be changed with no delay by the owner.
-- Newer BACs use a single owner model with a 2-step update process. In these contracts, the owner is authorized to make the changes noted below.
-- BACs implement controls for enabling and disabling deposits and withdrawals, and the admin or owner can change either setting with no delay.
-  - Loopback adapters only include a withdrawal control as they do not support new deposits.
-- The admin or owner can withdraw the native asset, used by some protocols for additional fee settlement, with no delay.
-- Some BACs implement a configurable slippage multiplier, which the admin or owner can change to any non-negative value with no delay.
+- BACs use a single owner model with a 2-step update process. In these contracts, the owner is authorized to make the changes noted below.
+- BACs implement controls for enabling and disabling deposits and withdrawals, and the owner can change either setting with no delay.
+- The owner can withdraw the native asset, used by some protocols for additional fee settlement, with no delay.
+- Some BACs implement a configurable slippage multiplier, which the owner can change with no delay.
 - Some BACs implement configurable compose parameters, which the owner can change with no delay.
-  - Some parameter fields are subject to validation for safety.
+- Some parameter fields are subject to validation for safety.
 
 ### Fixed Parameter Settings
 
@@ -167,26 +164,6 @@ The Exchange contract integrates with an extensible set of index price adapter c
 The Exchange contract integrates with an extensible set of managed account provider contracts (MAPCs). MAPCs contain the necessary logic to support shared account ownership, with a manager wallet trading on behalf of depositor wallets.
 
 - A whitelist defines the supported MAPC addresses, and the admin can update the whitelist according to [Governance’s](#governance-contract) field update logic.
-- MAPCs have a single owner, and the owner can be changed with no delay by the owner.
-- MAPCs have a single admin, and the admin can be changed with no delay by the owner.
-- The admin can enable or disable managed account creation, deposit initiation, and deposit application with no delay.
-- The admin can change the Managed Account Upgrade Block Timestamp Delay with no delay, subject to the Minimum Managed Account Upgrade Block Timestamp Delay and Maximum Managed Account Upgrade Block Timestamp Delay limits.
-- The admin can skim any tokens mistakenly sent to a MAPC.
-
-### FixedIncomeVaultProvider v1
-
-- Only whitelisted [BACs](#bridge-adapter-contracts) are authorized to add new managed accounts.
-- The manager wallet sets the vault configuration fields on creation and can update the fields subject to a governance delay.
-  - Updating any of the vault configuration fields is a two-step process.
-    - The manager wallet first calls `initiateManagedAccountUpgrade` with the new values, which initiates the Managed Account Upgrade Block Timestamp Delay.
-    - Once the Managed Account Upgrade Block Timestamp Delay expires, the manager wallet can make a second call to `finalizeManagedAccountUpgrade` to complete and apply the change.
-    - At any time during the Managed Account Upgrade Block Timestamp Delay, the manager wallet can cancel the change immediately with `cancelManagedAccountUpgrade`.
-  - Vault configuration fields are subject to validation as captured in the Fixed Parameter Settings.
-- The admin can change the address of the withdrawal dispatcher wallet with no delay. The withdrawal dispatcher wallet is distinct from the Exchange dispatcher wallet and is authorized to call `withdrawByQuantity` for non-local withdrawal requests and `emitEventsForFrontOfDepositAndWithdrawalQueues`.
-  - `withdrawByQuantity` is open to public calls for local withdrawal requests.
-- Only the Exchange contract is authorized to call: `deposit`, `applyPendingDeposit`, `cancelPendingWithdrawal`, `applyPendingWithdrawal`, `liquidateManagerWallet`.
-- Manager wallets can enable or disable deposits for their managed accounts with no delay.
-- Only the manager wallet and depositor wallets with nonzero balances can initiate an exit with `exitWallet`.
 
 ### Fixed Parameter Settings
 
@@ -194,20 +171,3 @@ These settings have been pre-determined and may be hard-coded or implicit in the
 
 - Owner Change Period: immediate
 - Admin Change Period: immediate
-- Minimum Managed Account Upgrade Block Timestamp Delay: 0
-- Maximum Managed Account Upgrade Block Timestamp Delay: 4 weeks
-- Vault Configuration Field Validation
-  - Minimum Interest Multiplier: 0%
-  - Maximum Interest Multiplier: 1000%
-  - Minimum Maximum Net Deposits: $100
-  - Maximum Maximum Net Deposits: $2^63 - 1
-  - Minimum Maximum Total Owed Quantity Available Multiplier To Initiate Exit: 50%
-  - Maximum Maximum Total Owed Quantity Available Multiplier To Initiate Exit: 200%
-  - Minimum Minimum Total Owed Quantity Available Multiplier To Allow Manager Wallet Withdrawal: 50%
-  - Maximum Minimum Total Owed Quantity Available Multiplier To Allow Manager Wallet Withdrawal: 999.999999%
-  - Minimum Minimum Unapplied Withdrawal Age In S To Initiate Exit: 1 hour
-  - Maximum Minimum Unapplied Withdrawal Age In S To Initiate Exit: 28 days
-  - Minimum Withdrawal Limit Percent For Depositors: 10%
-  - Maximum Withdrawal Limit Percent For Depositors: 100%
-  - Minimum Withdrawal Limit Percent For Vault: 0%
-  - Maximum Withdrawal Limit Percent For Vault: 100%

@@ -26,7 +26,7 @@ library String {
     }
 
     bytes memory selfPrefix = new bytes(prefixLength);
-    for (uint i = 0; i < prefixLength; i++) {
+    for (uint256 i = 0; i < prefixLength; i++) {
       selfPrefix[i] = bytes(self)[i];
     }
 

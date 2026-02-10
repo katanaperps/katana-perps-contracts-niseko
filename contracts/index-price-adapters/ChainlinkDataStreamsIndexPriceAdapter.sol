@@ -48,6 +48,9 @@ interface IVerifierProxy {
     bytes calldata payload,
     bytes calldata parameterPayload
   ) external payable returns (bytes memory verifierResponse);
+
+  // solhint-disable-next-line func-name-mixedcase
+  function s_feeManager() external view returns (address);
 }
 
 contract ChainlinkDataStreamsIndexPriceAdapter is IIndexPriceAdapter, Owned {
@@ -60,7 +63,7 @@ contract ChainlinkDataStreamsIndexPriceAdapter is IIndexPriceAdapter, Owned {
   IExchange public exchange;
   // Mapping of market base asset symbols to market structs
   mapping(string => ChainlinkDataStreamsMarket) public marketsByBaseAssetSymbol;
-  // Address of Chainling verifier contract
+  // Address of Chainlink verifier contract
   IVerifierProxy public immutable verifier;
 
   /**
@@ -129,6 +132,8 @@ contract ChainlinkDataStreamsIndexPriceAdapter is IIndexPriceAdapter, Owned {
     require(decimals <= 18, "Asset cannot have more than 18 decimals");
 
     require(feedId != bytes32(0x0), "Invalid feed ID");
+    // The first 2 bytes of the feed ID encode the report schema version
+    require(uint16(bytes2(feedId)) == 3, "Report version must be 3");
     require(!marketsByFeedId[feedId].exists, "Already added feed ID");
 
     require(bytes(baseAssetSymbol).length > 0, "Invalid base asset symbol");
@@ -169,15 +174,18 @@ contract ChainlinkDataStreamsIndexPriceAdapter is IIndexPriceAdapter, Owned {
 
   /**
    * @notice Validate encoded payload and return `IndexPrice` struct
+   *
+   * https://docs.chain.link/data-streams/tutorials/evm-onchain-report-verification#examine-the-code
    */
   function validateIndexPricePayload(bytes calldata payload) public override onlyExchange returns (IndexPrice memory) {
     // Extract reportData and schema version
     (, bytes memory reportData) = abi.decode(payload, (bytes32[3], bytes));
-
     uint16 reportVersion = (uint16(uint8(reportData[0])) << 8) | uint16(uint8(reportData[1]));
     require(reportVersion == 3, "Report version must be 3");
 
-    // Katana does not have a FeeManager, no funding needed to verify reports
+    // Katana does not have a FeeManager and no funding is needed to verify
+    // reports. Validate no FeeManager is set as a sanity check
+    require(verifier.s_feeManager() == address(0), "FeeManager not supported");
     bytes memory verified = verifier.verify(payload, bytes(""));
     ReportV3 memory report = abi.decode(verified, (ReportV3));
 
@@ -190,7 +198,7 @@ contract ChainlinkDataStreamsIndexPriceAdapter is IIndexPriceAdapter, Owned {
     return
       IndexPrice({
         baseAssetSymbol: market.baseAssetSymbol,
-        timestampInMs: SafeCast.toUint64(report.validFromTimestamp),
+        timestampInMs: SafeCast.toUint64(report.validFromTimestamp) * 1000,
         price: priceInPips
       });
   }

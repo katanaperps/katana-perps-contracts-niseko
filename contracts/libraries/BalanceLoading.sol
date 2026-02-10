@@ -12,6 +12,7 @@ import { Balance, FundingMultiplierQuartet, Market } from "./Structs.sol";
 library BalanceLoading {
   using BalanceTracking for BalanceTracking.Storage;
 
+  // solhint-disable-next-line func-name-mixedcase
   function loadBalanceBySymbol_delegatecall(
     address wallet,
     string memory assetSymbol,
@@ -38,6 +39,7 @@ library BalanceLoading {
     }
   }
 
+  // solhint-disable-next-line func-name-mixedcase
   function loadBalanceStructBySymbol_delegatecall(
     address wallet,
     string memory assetSymbol,

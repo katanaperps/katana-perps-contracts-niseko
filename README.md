@@ -28,7 +28,7 @@ yarn test:coverage
 
 ## Background
 
-The Katana Perps Niseko release implements high-performance, leveraged trading backed by smart contract fund custody. This release includes support for managed accounts, a shared ownership account structure first implemented in the form of [fixed-income vaults](#fixedincomevaultprovider-v1).
+The Katana Perps Niseko release implements high-performance, leveraged trading backed by smart contract fund custody. This release includes support for [managed accounts](#managed-accounts), a shared ownership account structure.
 
 ## Contract Structure
 
@@ -40,7 +40,7 @@ The Niseko on-chain infrastructure includes three main contracts and a host of s
 
 Bytecode size limits require splitting much of Exchange’s logic into external library delegatecalls. `BalanceLoading`, `ClosureDeleveraging`, `Depositing`, `ExitFund`, `Funding`, `IndexPriceMargin`, `ManagedAccounts`, `MarketAdmin`, `NonceInvalidations`, `OraclePriceMargin`, `PositionBelowMinimumLiquidation`, `PositionInDeactivatedMarketLiquidation`, `Trading`, `Transferring`, `WalletExitAcquisitionDeleveraging`, `WalletExitLiquidation`, `WalletInMaintenanceAcquisitionDeleveraging`, `WalletInMaintenanceLiquidation`, and `Withdrawing` are structured as external libraries supporting Exchange functionality and interacting with Exchange storage. Additionally, stack size limits require many function parameters to be packaged as structs.
 
-An extensible set of [managed account provider contracts](#managed-accounts) implements a range of ownership and profit distribution models for managed accounts.
+In future releases, an extensible set of [managed account provider contracts](#managed-accounts) will implement a range of ownership and profit distribution models for managed accounts.
 
 An extensible set of [bridge protocol adapter contracts](#cross-chain-bridge-protocol-support) implements support for cross-chain [deposits](#deposit) and [withdrawals](#withdraw).
 
@@ -198,7 +198,7 @@ Niseko uses index prices rather than order book prices for all [margin calculati
 Index prices are frequently updated in Niseko’s off-chain infrastructure and lazily published on chain via Exchange’s `publishIndexPrices` by the dispatcher wallet. Specifically, on-chain index prices are only updated immediately prior to another dependent operation. For example, if the BTC-USD on-chain index price is out of date, Niseko’s off-chain infrastructure first publishes the latest index price for BTC before submitting a new trade for settlement. Lazy on-chain price updates minimize transaction volume and gas costs.
 
 
-- Niseko implements a modular index price validation system supporting an extensible range of pricing data sources. At launch, Niseko supports [Pyth Network](https://pyth.network/), [Stork](https://www.stork.network/), and a Katana Perps-operated first party index price data service.
+- Niseko implements a modular index price validation system supporting an extensible range of pricing data sources. At launch, Niseko supports [Chainlink](https://chain.link/), [RedStone](https://www.redstone.finance/), and a Katana Perps-operated first party index price data service.
 - Modular index price adapter contracts may be added, upgraded, or removed independently of [Exchange upgrades](#upgradability), subject to a governance delay for safety. See [controls and governance](#controls-and-governance) for details.
 - First party index prices are collected by secure off-chain systems from a range of price sources. They are signed at the point of collection with signatures that are verified on chain.
 - In addition to verifying signatures, contract logic also verifies that index price timestamps are greater than the last committed index price, and also that timestamps are not more than one day in the future.
@@ -228,117 +228,11 @@ Managed accounts provide shared ownership capabilities, allowing depositor walle
 
 ### Provider Contracts
 
-Managed account provider contracts implement specific shared ownership strategies. The Niseko Managed Accounts release launches with FixedIncomeVaultProvider v1 as the sole provider. Profit sharing providers and other strategies are planned.
-
-#### FixedIncomeVaultProvider v1
-
-- FixedIncomeVaultProvider v1 returns depositors a fixed yield on deposited funds over time regardless of underlying trading performance.
-- The manager retains any profits beyond the configured depositor yield. Profits in excess of depositor obligations may be withdrawn by the manager. Managers must also contribute against losses to meet depositor obligations.
-- Given the manager retention of all returns in excess of the configured depositor yield, there are no explicit management or carry fees.
-
-### Supporting Contracts
-
-In addition to the managed account provider contracts and associated libraries, Niseko’s [bridge adapter contracts](#cross-chain-bridge-protocol-support) implement important validations and handling on behalf of managed accounts.
-
-- `ExchangeLayerZeroAdapter_v3` relays managed account addition requests and deposits from the LayerZero v2 OFT bridge and relays withdrawals out via the LayerZero v2 OFT bridge.
-- `ExchangeLoopbackAdapter_v1` routes funds between a depositor wallet’s exchange balance and their managed account holdings, allowing distribution of funds without leaving the product.
-- `ExchangeAdapterComposing_v1`, a dependency of both of the above, parses payloads, validates eligible wallets, enforces minimums, collects deposit fees, and provides native funds to manager wallets for gas.
-
-Best efforts are made to gracefully handle any failures with a minimum of user inconvenience.
-
-### Configuration
-
-Manager wallets retain significant control over the configuration of their accounts, and they may update their account configuration at any time subject to a governance delay. FixedIncomeVaultProvider v1 offers the following manager-defined configuration:
-
-- `interestMultiplier`: Annual interest rate paid to depositors
-- `maximumNetDeposits`: Maximum net deposit quantity before deposits are rejected
-- `maximumTotalOwedQuantityAvailableMultiplierToInitiateExit`: Account exit value percent threshold of total owed to initiate exit
-- `minimumTotalOwedQuantityAvailableMultiplierToAllowManagerWalletWithdrawal`: Account exit value percent limit of total owed available for manager withdrawal
-- `minimumUnappliedWithdrawalAgeInSToInitiateExit`: Minimum age in seconds of the oldest queued withdrawal after which an exit may be initiated
-- `withdrawalLimitPercentForDepositors`: Maximum percent of depositor total owed available for withdrawal in one withdrawal period
-- `withdrawalLimitPercentForVault`: Maximum percent of vault total owed available for withdrawal in one withdrawal period
-
-These items are covered in greater detail in further sections.
-
-### Fees
-
-As noted above, FixedIncomeVaultProvider v1 does not implement management or carry fees, however several fees apply to all vaults:
-
-- Creation fee: A fee is deducted from a manager’s initial deposit at vault creation time
-- Deposit fee: A fee is deducted from incoming deposits
-- Withdrawal fee: Managed account withdrawals are subject to standard withdrawal fees, including bridge fees if applicable
-
-See [controls and governance](#controls-and-governance) for details.
-
-### Creation
-
-Managed account creation is initiated on-chain via a bridged `AddManagedAccount` transaction. Manager wallets may not hold any open positions or collateral on the exchange at creation time. `AddManagedAccount` transactions include the initial account configuration and manager deposit, and are subject to a deposit minimum and fee.
-
-### Managed Account Deposits
-
-Deposits are initiated on-chain via `DepositToManagedAccount` transactions that are either bridged or looped back from the exchange. Deposits are subject to minimums and fees, and may be disabled and enabled by either the manager or admin.
-
-- Deposits are subject to a manager-configured net deposit limit. Net deposits are defined as `deposits - withdrawals` and apply to both manager and depositor deposits.
-- Managed account deposits are subject to the same two-step process as standard deposits. Internal provider contract ownership tracking is only updated on the second `apply` step. 
-- Depositors only start earning yield after the `apply` step. While there are no timing guarantees, off-chain systems apply incoming deposits as quickly as possible. Deposit indexes and queues discourage individual deposit censorship.
-
-### Yield
-
-FixedIncomeVaultProvider v1 returns a manager-configured APY to depositors. Depositor APY uses continuous compounding based on the annual rate specified in the configuration, and automatically accounts for changes in rate. Depositors stop earning yield on withdrawal initiation or [managed account exit](#managed-account-exits).
-
-The manager wallet does not earn yield but may withdraw any trading profits in excess of depositor obligations. `minimumTotalOwedQuantityAvailableMultiplierToAllowManagerWalletWithdrawal` defines the percent of the total obligations down to which the manager may withdraw funds. For example, if the configured value is 110%, total obligations are $100,000, and the [exit value](#wallet-exits) of the managed account is $115,000, the manager may withdraw $5,000. The manager is also responsible for servicing any shortfalls of value due to trading losses.
-
-### Managed Account Withdraws
-
-Withdrawals are initiated on- or off-chain using a two-step initiate and apply model. Off-chain systems use a different wallet than the primary dispatcher wallet to post withdrawal request transactions to provider contracts on behalf of users. Managed account withdrawals may target the native chain, bridge adapters, or the loopback adapter. Withdrawals are subject to minimums and fees and any remaining dust is retained by the managed account.
-
-#### Models
-
-There are two managed account withdrawal models to support various provider ownership strategies:
-
-- By quantity: Similar to standard account withdrawals, users specify the desired quantity in collateral terms. To control slippage, an optional `maxShares` parameter limits the number of shares retired in the process.
-- By shares: Users specify the desired quantity in number of shares. To control slippage, a `minimumQuantity` parameter limits the collateral returned in the process.
-
-FixedIncomeVaultProvider v1 only implements withdrawals by quantity and does not use the `maxShares` parameter.
-
-#### Rate Limits
-
-Withdrawals are subject to manager-configured rate limits to ensure predictable available collateral and leverage utilization. Rate limits reset on a periodic basis, which is configured to be one day. Every rate limit period:
-
-- Depositors may withdraw up to `withdrawalLimitPercentForVault` percent of total depositor obligations. This withdrawal quantity is shared by all depositor wallets.
-- In addition, depositors may withdraw up to the `withdrawalLimitPercentForDepositors` percent of individual depositor obligations.
-- Withdrawal quantities are scaled for yield. For example, with a 20% depositor limit, depositors may withdraw all funds in 5 periods without any vault percent.
-- If the manager initiates a configuration change that negatively impacts depositors, withdrawal rate limits are suspended until the upgrade is applied or canceled.
-
-Manager wallets are not subject to withdrawal rate limits.
-
-#### Withdrawal Queue
-
-Managed account withdrawals are subject to the same initial margin requirements as standard withdrawals. As a result, depositors may submit withdrawal requests that cannot be serviced immediately because the manager wallet has insufficient available collateral. Rather than force-closing positions, managed accounts enqueue all withdrawal requests, and off-chain systems automatically apply the withdrawals once sufficient collateral is available.
-
-- If a withdrawal cannot be applied immediately, off-chain systems place the manager wallet in reduce only mode. In reduce only mode, no orders are accepted that may increase the absolute quantity of any position, and all such standing orders are proactively canceled. Reduce only mode is removed on withdrawal application.
-- If a withdrawal request remains in the queue longer than the manager-configured `minimumUnappliedWithdrawalAgeInSToInitiateExit` the managed account may be exited by any depositor.
-
-#### Withdrawal Censorship
-
-Withdrawal requests may be submitted on chain, provided that they target the native chain and meet the necessary minimums. Combined with the withdrawal queue exit time limit, this mechanism ensures that off-chain systems cannot censor withdrawal requests.
-
-### Managed Account Exits
-
-Like standard accounts, managed accounts include an [exit mechanism](#wallet-exits) ensuring fund access under a range of adverse conditions. Manager wallets cannot unilaterally exit their account. Instead FixedIncomeVaultProvider v1 exits are possible under two conditions:
-
-1. A withdrawal request remains in queue longer than the manager-configured `minimumUnappliedWithdrawalAgeInSToInitiateExit`.
-2. The exit value of the account falls below `maximumTotalOwedQuantityAvailableMultiplierToInitiateExit` of the account’s total depositor obligations.
-
-In either case, a single on-chain call to the provider’s `exitWallet` function initiates the process which proceeds similarly to a standard wallet exit. Depositors must make individual `withdrawExit` calls to claim any available collateral. If the managed account’s exit value exceeds its total obligations, the manager wallet may withdraw any excess. If the exit value does not meet the total obligations, each depositor receives a fraction of their owed value and the manager receives nothing.
-
-### Liquidations
-
-Managed accounts are subject to standard [liquidation](#liquidation) and [ADL actions](#automatic-deleveraging). Once a managed account is liquidated, it may not be reinstated with new deposits. Deposits that are initiated but not yet applied may be present in the deposit queue when a liquidation occurs. In this case, these pending deposits are refunded back to the depositing wallets’ exchange balances on liquidation or final ADL action.
+Managed account provider contracts implement specific shared ownership strategies. No providers are included in this release, however several strategies are planned for future releases.
 
 ### Managed Account Controls and Governance
 
-See [controls and governance](#controls-and-governance) for the wide range of coverage for managed accounts. 
+See [controls and governance](#controls-and-governance) for the coverage of managed accounts. 
 
 ### Upgrades
 
@@ -372,11 +266,7 @@ For deposits, adapters receive bridged funds and call Exchange’s `deposit` fun
 
 Cross-chain withdrawal requests are signed by custody wallets, similar to withdrawal requests to the local chain, but include an additional `payload` field. Niseko’s withdrawal logic validates the request’s adapter address, transfers the funds to the adapter, then calls the adapter’s `withdrawQuoteAsset` with the `payload` parameter. `payload` ABI-encodes the necessary parameters for the protocol’s bridge function to deliver funds to the destination chain. If the bridge call fails, funds are redeposited to the Exchange.
 
-- [Managed account](#managed-accounts) creation is handled exclusively through `ExchangeLayerZeroAdapter_v3`.
-- Managed account deposits are handled through `ExchangeLayerZeroAdapter_v3` and `ExchangeLoopbackAdapter_v1`.
-- Previous versions of the `ExchangeLayerZeroAdapter` implement more limited functionality but are retained for backwards compatibility.
-- The `Katana PerpsStargateForwarder` contracts relay deposit and withdrawal transactions between the exchange’s LayerZero v2 OFT bridge and the broader Stargate bridge network.
-
+Forwarder contracts relay deposit and withdrawal transactions through a hub chain, such as Ethereum, as well as wrapping collateral in an ERC-4626 vault in the process.
 
 Updates to the set of valid adapter contract addresses are subject to a governance delay for safety. See [controls and governance](#controls-and-governance) for details.
 

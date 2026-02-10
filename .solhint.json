@@ -14,8 +14,10 @@
     "gas-indexed-events": "off",
     "gas-small-strings": "off",
     "gas-strict-inequalities": "off",
+    "gas-struct-packing": "off",
     "immutable-vars-naming": "off",
     "max-states-count": "off",
+    "no-empty-blocks": "off",
     "reason-string": "off"
   }
 }
