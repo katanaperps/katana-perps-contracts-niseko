@@ -42,7 +42,7 @@ Bytecode size limits require splitting much of Exchange’s logic into external 
 
 In future releases, an extensible set of [managed account provider contracts](#managed-accounts) will implement a range of ownership and profit distribution models for managed accounts.
 
-In future releases, an extensible set of [bridge protocol adapter contracts](#cross-chain-bridge-protocol-support) will implement support for cross-chain [deposits](#deposit) and [withdrawals](#withdraw).
+An extensible set of [bridge protocol adapter contracts](#cross-chain-bridge-protocol-support) implements support for cross-chain [deposits](#deposit) and [withdrawals](#withdraw).
 
 # Perpetuals
 
@@ -260,11 +260,13 @@ Niseko introduces a new method of order authorization with delegated keys. When 
 
 ## Cross-Chain Bridge Protocol Support
 
-In order to implement seamless cross-chain [deposits](#deposit) and [withdrawals](#withdraw), Niseko supports an extensible set of adapter contracts for bridge protocol integration. No adapter contracts are included in this release, however several integrations are planned for future releases.
+In order to support seamless cross-chain [deposits](#deposit) and [withdrawals](#withdraw), Niseko includes an extensible set of adapter contracts for bridge protocol integration.
 
 For deposits, adapters receive bridged funds and call Exchange’s `deposit` function with the provided destination wallet address. Only protocols that implement single transaction bridge-and-call functionality are supported.
 
 Cross-chain withdrawal requests are signed by custody wallets, similar to withdrawal requests to the local chain, but include an additional `payload` field. Niseko’s withdrawal logic validates the request’s adapter address, transfers the funds to the adapter, then calls the adapter’s `withdrawQuoteAsset` with the `payload` parameter. `payload` ABI-encodes the necessary parameters for the protocol’s bridge function to deliver funds to the destination chain. If the bridge call fails, funds are redeposited to the Exchange.
+
+Forwarder contracts relay deposit and withdrawal transactions through a hub chain, such as Ethereum, as well as wrapping collateral in an ERC-4626 vault in the process.
 
 Updates to the set of valid adapter contract addresses are subject to a governance delay for safety. See [controls and governance](#controls-and-governance) for details.
 

@@ -1,6 +1,6 @@
 {
   "name": "@katanaperps/katana-perps-contracts-niseko",
-  "version": "1.0.0-chainlink-adapter.1",
+  "version": "1.0.0-layer-zero-bridge-adapter.2",
   "description": "Collects source code, tests, and documentation for the Katana Perps Niseko release Solidity contracts",
   "homepage": "https://github.com/katanaperps/katana-perps-contracts-niseko",
   "repository": "https://github.com/katanaperps/katana-perps-contracts-niseko",
@@ -12,6 +12,8 @@
     "lib": "build/lib"
   },
   "files": [
+    "artifacts/contracts/bridge-adapters/libraries/ExchangeAdapterComposing_v1.sol/ExchangeAdapterComposing_v1.json",
+    "artifacts/contracts/bridge-adapters/libraries/KatanaPerpsStargateForwarderComposing_v1.sol/KatanaPerpsStargateForwarderComposing_v1.json",
     "artifacts/contracts/libraries/BalanceLoading.sol/BalanceLoading.json",
     "artifacts/contracts/libraries/ClosureDeleveraging.sol/ClosureDeleveraging.json",
     "artifacts/contracts/libraries/Depositing.sol/Depositing.json",
