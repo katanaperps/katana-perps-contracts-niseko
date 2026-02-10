@@ -1038,7 +1038,8 @@ describe('ChainlinkDataStreamsIndexPriceAdapter', function () {
 
   describe('deploy', async function () {
     it('should work for valid activator and single market with price multiplier of 1', async () => {
-      const feedId = ethers.encodeBytes32String('ETH');
+      const feedId =
+        '0x000362205e10b3a147d02792eccee483dca6c7b44ecce7012cb8c6e0b68b3ae9';
       // Deploy a mock contract to use as verifier
       const mockVerifier = await ExchangeIndexPriceAdapterMockFactory.deploy(
         ethers.ZeroAddress,
@@ -1055,8 +1056,10 @@ describe('ChainlinkDataStreamsIndexPriceAdapter', function () {
     });
 
     it('should work for valid activator and multiple markets', async () => {
-      const feedId1 = ethers.encodeBytes32String('ETH');
-      const feedId2 = ethers.encodeBytes32String('BTC');
+      const feedId1 =
+        '0x000362205e10b3a147d02792eccee483dca6c7b44ecce7012cb8c6e0b68b3ae9';
+      const feedId2 =
+        '0x00039d9e45394f473ab1f050a1b963e6b05351e52d71e507509ada0c95ed75b8';
       const mockVerifier = await ExchangeIndexPriceAdapterMockFactory.deploy(
         ethers.ZeroAddress,
       );
@@ -1072,7 +1075,8 @@ describe('ChainlinkDataStreamsIndexPriceAdapter', function () {
     });
 
     it('should work for valid activator and market with price multiplier greater than 1', async () => {
-      const feedId = ethers.encodeBytes32String('ETH');
+      const feedId =
+        '0x000362205e10b3a147d02792eccee483dca6c7b44ecce7012cb8c6e0b68b3ae9';
       const baseAssetSymbolWithMultiplier = '1000ETH';
       const mockVerifier = await ExchangeIndexPriceAdapterMockFactory.deploy(
         ethers.ZeroAddress,
@@ -1104,7 +1108,8 @@ describe('ChainlinkDataStreamsIndexPriceAdapter', function () {
     });
 
     it('should work with 18 decimals', async () => {
-      const feedId = ethers.encodeBytes32String('ETH');
+      const feedId =
+        '0x000362205e10b3a147d02792eccee483dca6c7b44ecce7012cb8c6e0b68b3ae9';
       const mockVerifier = await ExchangeIndexPriceAdapterMockFactory.deploy(
         ethers.ZeroAddress,
       );
@@ -1120,7 +1125,8 @@ describe('ChainlinkDataStreamsIndexPriceAdapter', function () {
     });
 
     it('should revert for invalid activator address', async () => {
-      const feedId = ethers.encodeBytes32String('ETH');
+      const feedId =
+        '0x000362205e10b3a147d02792eccee483dca6c7b44ecce7012cb8c6e0b68b3ae9';
       const mockVerifier = await ExchangeIndexPriceAdapterMockFactory.deploy(
         ethers.ZeroAddress,
       );
@@ -1138,7 +1144,8 @@ describe('ChainlinkDataStreamsIndexPriceAdapter', function () {
     });
 
     it('should revert for argument length mismatch between baseAssetSymbols and decimals', async () => {
-      const feedId = ethers.encodeBytes32String('ETH');
+      const feedId =
+        '0x000362205e10b3a147d02792eccee483dca6c7b44ecce7012cb8c6e0b68b3ae9';
       const mockVerifier = await ExchangeIndexPriceAdapterMockFactory.deploy(
         ethers.ZeroAddress,
       );
@@ -1156,8 +1163,10 @@ describe('ChainlinkDataStreamsIndexPriceAdapter', function () {
     });
 
     it('should revert for argument length mismatch between decimals and feedIds', async () => {
-      const feedId1 = ethers.encodeBytes32String('ETH');
-      const feedId2 = ethers.encodeBytes32String('BTC');
+      const feedId1 =
+        '0x000362205e10b3a147d02792eccee483dca6c7b44ecce7012cb8c6e0b68b3ae9';
+      const feedId2 =
+        '0x00039d9e45394f473ab1f050a1b963e6b05351e52d71e507509ada0c95ed75b8';
       const mockVerifier = await ExchangeIndexPriceAdapterMockFactory.deploy(
         ethers.ZeroAddress,
       );
@@ -1175,7 +1184,8 @@ describe('ChainlinkDataStreamsIndexPriceAdapter', function () {
     });
 
     it('should revert for argument length mismatch between feedIds and priceMultipliers', async () => {
-      const feedId = ethers.encodeBytes32String('ETH');
+      const feedId =
+        '0x000362205e10b3a147d02792eccee483dca6c7b44ecce7012cb8c6e0b68b3ae9';
       const mockVerifier = await ExchangeIndexPriceAdapterMockFactory.deploy(
         ethers.ZeroAddress,
       );
@@ -1193,7 +1203,8 @@ describe('ChainlinkDataStreamsIndexPriceAdapter', function () {
     });
 
     it('should revert for decimals greater than 18', async () => {
-      const feedId = ethers.encodeBytes32String('ETH');
+      const feedId =
+        '0x000362205e10b3a147d02792eccee483dca6c7b44ecce7012cb8c6e0b68b3ae9';
       const mockVerifier = await ExchangeIndexPriceAdapterMockFactory.deploy(
         ethers.ZeroAddress,
       );
@@ -1230,7 +1241,8 @@ describe('ChainlinkDataStreamsIndexPriceAdapter', function () {
     });
 
     it('should revert for invalid base asset symbol (empty string)', async () => {
-      const feedId = ethers.encodeBytes32String('ETH');
+      const feedId =
+        '0x000362205e10b3a147d02792eccee483dca6c7b44ecce7012cb8c6e0b68b3ae9';
       const mockVerifier = await ExchangeIndexPriceAdapterMockFactory.deploy(
         ethers.ZeroAddress,
       );
@@ -1248,7 +1260,8 @@ describe('ChainlinkDataStreamsIndexPriceAdapter', function () {
     });
 
     it('should revert for invalid price multiplier (zero)', async () => {
-      const feedId = ethers.encodeBytes32String('ETH');
+      const feedId =
+        '0x000362205e10b3a147d02792eccee483dca6c7b44ecce7012cb8c6e0b68b3ae9';
       const mockVerifier = await ExchangeIndexPriceAdapterMockFactory.deploy(
         ethers.ZeroAddress,
       );
@@ -1266,7 +1279,8 @@ describe('ChainlinkDataStreamsIndexPriceAdapter', function () {
     });
 
     it('should revert when price multiplier > 1 but base asset symbol does not start with multiplier', async () => {
-      const feedId = ethers.encodeBytes32String('ETH');
+      const feedId =
+        '0x000362205e10b3a147d02792eccee483dca6c7b44ecce7012cb8c6e0b68b3ae9';
       const mockVerifier = await ExchangeIndexPriceAdapterMockFactory.deploy(
         ethers.ZeroAddress,
       );
@@ -1286,7 +1300,8 @@ describe('ChainlinkDataStreamsIndexPriceAdapter', function () {
     });
 
     it('should revert for duplicate feed ID', async () => {
-      const feedId = ethers.encodeBytes32String('ETH');
+      const feedId =
+        '0x000362205e10b3a147d02792eccee483dca6c7b44ecce7012cb8c6e0b68b3ae9';
       const mockVerifier = await ExchangeIndexPriceAdapterMockFactory.deploy(
         ethers.ZeroAddress,
       );
@@ -1304,8 +1319,10 @@ describe('ChainlinkDataStreamsIndexPriceAdapter', function () {
     });
 
     it('should revert for duplicate base asset symbol', async () => {
-      const feedId1 = ethers.encodeBytes32String('ETH');
-      const feedId2 = ethers.encodeBytes32String('BTC');
+      const feedId1 =
+        '0x000362205e10b3a147d02792eccee483dca6c7b44ecce7012cb8c6e0b68b3ae9';
+      const feedId2 =
+        '0x00039d9e45394f473ab1f050a1b963e6b05351e52d71e507509ada0c95ed75b8';
       const mockVerifier = await ExchangeIndexPriceAdapterMockFactory.deploy(
         ethers.ZeroAddress,
       );
@@ -1323,7 +1340,8 @@ describe('ChainlinkDataStreamsIndexPriceAdapter', function () {
     });
 
     it('should revert for invalid verifier contract address (not a contract)', async () => {
-      const feedId = ethers.encodeBytes32String('ETH');
+      const feedId =
+        '0x000362205e10b3a147d02792eccee483dca6c7b44ecce7012cb8c6e0b68b3ae9';
       const notAContract = (await ethers.getSigners())[5].address;
 
       await expect(
@@ -1356,7 +1374,8 @@ describe('ChainlinkDataStreamsIndexPriceAdapter', function () {
           await mockVerifier.getAddress(),
         );
 
-      const feedId = ethers.encodeBytes32String('ETH');
+      const feedId =
+        '0x000362205e10b3a147d02792eccee483dca6c7b44ecce7012cb8c6e0b68b3ae9';
       await indexPriceAdapter.addMarket(baseAssetSymbol, 8, feedId, 1);
 
       const market = await indexPriceAdapter.marketsByBaseAssetSymbol(
@@ -1383,7 +1402,8 @@ describe('ChainlinkDataStreamsIndexPriceAdapter', function () {
           await mockVerifier.getAddress(),
         );
 
-      const feedId = ethers.encodeBytes32String('ETH');
+      const feedId =
+        '0x000362205e10b3a147d02792eccee483dca6c7b44ecce7012cb8c6e0b68b3ae9';
       const baseAssetSymbolWithMultiplier = '1000ETH';
       await indexPriceAdapter.addMarket(
         baseAssetSymbolWithMultiplier,
@@ -1414,7 +1434,8 @@ describe('ChainlinkDataStreamsIndexPriceAdapter', function () {
           await mockVerifier.getAddress(),
         );
 
-      const feedId = ethers.encodeBytes32String('ETH');
+      const feedId =
+        '0x000362205e10b3a147d02792eccee483dca6c7b44ecce7012cb8c6e0b68b3ae9';
       await expect(
         indexPriceAdapter.addMarket(baseAssetSymbol, 19, feedId, 1),
       ).to.eventually.be.rejectedWith(
@@ -1441,6 +1462,30 @@ describe('ChainlinkDataStreamsIndexPriceAdapter', function () {
       ).to.eventually.be.rejectedWith(/invalid feed id/i);
     });
 
+    it('should revert when feedId encodes wrong report version', async () => {
+      const mockVerifier = await ExchangeIndexPriceAdapterMockFactory.deploy(
+        ethers.ZeroAddress,
+      );
+      const indexPriceAdapter =
+        await ChainlinkDataStreamsIndexPriceAdapterFactory.deploy(
+          owner.address,
+          [],
+          [],
+          [],
+          [],
+          await mockVerifier.getAddress(),
+        );
+
+      await expect(
+        indexPriceAdapter.addMarket(
+          baseAssetSymbol,
+          8,
+          '0x000b2bba8b7a8f22b2175e95997312389df8b77c841a982814eba028817efa15',
+          1,
+        ),
+      ).to.eventually.be.rejectedWith(/report version must be 3/i);
+    });
+
     it('should revert for duplicate feedId', async () => {
       const mockVerifier = await ExchangeIndexPriceAdapterMockFactory.deploy(
         ethers.ZeroAddress,
@@ -1455,7 +1500,8 @@ describe('ChainlinkDataStreamsIndexPriceAdapter', function () {
           await mockVerifier.getAddress(),
         );
 
-      const feedId = ethers.encodeBytes32String('ETH');
+      const feedId =
+        '0x000362205e10b3a147d02792eccee483dca6c7b44ecce7012cb8c6e0b68b3ae9';
       await indexPriceAdapter.addMarket(baseAssetSymbol, 8, feedId, 1);
 
       await expect(
@@ -1477,7 +1523,8 @@ describe('ChainlinkDataStreamsIndexPriceAdapter', function () {
           await mockVerifier.getAddress(),
         );
 
-      const feedId = ethers.encodeBytes32String('ETH');
+      const feedId =
+        '0x000362205e10b3a147d02792eccee483dca6c7b44ecce7012cb8c6e0b68b3ae9';
       await expect(
         indexPriceAdapter.addMarket('', 8, feedId, 1),
       ).to.eventually.be.rejectedWith(/invalid base asset symbol/i);
@@ -1497,7 +1544,8 @@ describe('ChainlinkDataStreamsIndexPriceAdapter', function () {
           await mockVerifier.getAddress(),
         );
 
-      const feedId = ethers.encodeBytes32String('ETH');
+      const feedId =
+        '0x000362205e10b3a147d02792eccee483dca6c7b44ecce7012cb8c6e0b68b3ae9';
       await expect(
         indexPriceAdapter.addMarket(baseAssetSymbol, 8, feedId, 0),
       ).to.eventually.be.rejectedWith(/invalid price multiplier/i);
@@ -1517,7 +1565,8 @@ describe('ChainlinkDataStreamsIndexPriceAdapter', function () {
           await mockVerifier.getAddress(),
         );
 
-      const feedId = ethers.encodeBytes32String('ETH');
+      const feedId =
+        '0x000362205e10b3a147d02792eccee483dca6c7b44ecce7012cb8c6e0b68b3ae9';
       await expect(
         indexPriceAdapter.addMarket(baseAssetSymbol, 8, feedId, 1000), // 'ETH' does not start with '1000'
       ).to.eventually.be.rejectedWith(
@@ -1539,7 +1588,8 @@ describe('ChainlinkDataStreamsIndexPriceAdapter', function () {
           await mockVerifier.getAddress(),
         );
 
-      const feedId = ethers.encodeBytes32String('ETH');
+      const feedId =
+        '0x000362205e10b3a147d02792eccee483dca6c7b44ecce7012cb8c6e0b68b3ae9';
       const nonAdminWallet = (await ethers.getSigners())[8];
 
       await expect(
@@ -1643,7 +1693,8 @@ describe('ChainlinkDataStreamsIndexPriceAdapter', function () {
 
   describe('validateIndexPricePayload', async function () {
     it('should work when called with valid arguments', async () => {
-      const feedId = ethers.encodeBytes32String('ETH');
+      const feedId =
+        '0x000362205e10b3a147d02792eccee483dca6c7b44ecce7012cb8c6e0b68b3ae9';
       const decimals = 8;
       const priceMultiplier = 1;
       const priceInDecimals = BigInt(2000_00000000); // $2000 with 8 decimals
@@ -1742,12 +1793,13 @@ describe('ChainlinkDataStreamsIndexPriceAdapter', function () {
 
       // Verify the IndexPrice struct fields
       expect(indexPrice.baseAssetSymbol).to.equal(baseAssetSymbol);
-      expect(indexPrice.timestampInMs).to.equal(validFromTimestamp);
+      expect(indexPrice.timestampInMs).to.equal(validFromTimestamp * 1000);
       expect(indexPrice.price).to.equal(priceInDecimals);
     });
 
     it('should revert when schema version is not 3', async () => {
-      const feedId = ethers.encodeBytes32String('ETH');
+      const feedId =
+        '0x000362205e10b3a147d02792eccee483dca6c7b44ecce7012cb8c6e0b68b3ae9';
       const decimals = 8;
       const priceMultiplier = 1;
       const priceInDecimals = BigInt(2000_00000000);
@@ -1825,8 +1877,10 @@ describe('ChainlinkDataStreamsIndexPriceAdapter', function () {
     });
 
     it('should revert when feedId does not correspond to an added market', async () => {
-      const feedId = ethers.encodeBytes32String('ETH');
-      const unknownFeedId = ethers.encodeBytes32String('BTC');
+      const feedId =
+        '0x000362205e10b3a147d02792eccee483dca6c7b44ecce7012cb8c6e0b68b3ae9';
+      const unknownFeedId =
+        '0x00039d9e45394f473ab1f050a1b963e6b05351e52d71e507509ada0c95ed75b8';
       const decimals = 8;
       const priceMultiplier = 1;
       const priceInDecimals = BigInt(2000_00000000);
@@ -1904,7 +1958,8 @@ describe('ChainlinkDataStreamsIndexPriceAdapter', function () {
     });
 
     it('should revert when called by wallet other than whitelisted Exchange', async () => {
-      const feedId = ethers.encodeBytes32String('ETH');
+      const feedId =
+        '0x000362205e10b3a147d02792eccee483dca6c7b44ecce7012cb8c6e0b68b3ae9';
       const decimals = 8;
       const priceMultiplier = 1;
 
@@ -1933,7 +1988,8 @@ describe('ChainlinkDataStreamsIndexPriceAdapter', function () {
     });
 
     it('should revert when verifier.s_feeManager() returns non-zero address', async () => {
-      const feedId = ethers.encodeBytes32String('ETH');
+      const feedId =
+        '0x000362205e10b3a147d02792eccee483dca6c7b44ecce7012cb8c6e0b68b3ae9';
       const decimals = 8;
       const priceMultiplier = 1;
       const priceInDecimals = BigInt(2000_00000000);
