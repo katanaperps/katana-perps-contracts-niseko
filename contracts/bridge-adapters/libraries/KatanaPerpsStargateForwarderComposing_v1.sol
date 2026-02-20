@@ -153,8 +153,9 @@ library KatanaPerpsStargateForwarderComposing_v1 {
       return;
     }
 
-    // Redeem vbUSDC from vault and receive USDC
-    arguments.vbUSDC.redeem(arguments.amountLD, address(this), address(this));
+    // Redeem vbUSDC from vault and receive USDC. Per EIP-4626 previewRedeem MAY return less than
+    // redeem, so store the actual amount redeemed below
+    usdcAmount = arguments.vbUSDC.redeem(arguments.amountLD, address(this), address(this));
 
     // If the destination endpoint ID is Ethereum then a second hop is not required, transfer USDC
     // directly to destination wallet

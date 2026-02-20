@@ -750,6 +750,57 @@ describe('KatanaPerpsStargateForwarder_v1', function () {
         depositQuantityInAssetUnits,
       );
     });
+
+    it('should emit ForwardFailed and transfer USDC to owner when vbUSDC deposit is disabled', async () => {
+      // Disable deposit on vbUSDC to trigger the deposit failure fallback
+      await vbUsdc.setDepositDisabled(true);
+
+      // Transfer USDC to the forwarder (simulating bridged tokens arriving)
+      await usdc.transfer(
+        await forwarder.getAddress(),
+        depositQuantityInAssetUnits,
+      );
+
+      const ownerAddress = await forwarder.owner();
+      const ownerUsdcBefore = await usdc.balanceOf(ownerAddress);
+      const startBlock = await ethers.provider.getBlockNumber();
+
+      // Call lzCompose - vbUSDC deposit will fail and trigger fallback
+      await stargatePoolMock.lzCompose(
+        await forwarder.getAddress(),
+        await stargatePoolMock.getAddress(), // from = stargate
+        ethers.randomBytes(32),
+        composeMessage,
+        await stargatePoolMock.getAddress(),
+        '0x',
+      );
+
+      // Assert ForwardFailed event was emitted
+      const forwardFailedEvents = await forwarder.queryFilter(
+        forwarder.filters.ForwardFailed(),
+        startBlock + 1,
+      );
+      expect(forwardFailedEvents).to.have.lengthOf(1);
+      expect(forwardFailedEvents[0].args.destinationWallet).to.equal(
+        ethers.ZeroAddress,
+      );
+      expect(forwardFailedEvents[0].args.quantity).to.equal(
+        depositQuantityInAssetUnits,
+      );
+      // Verify errorData encodes the expected error string "Deposit disabled"
+      expect(
+        Buffer.from(
+          forwardFailedEvents[0].args.errorData.substring(2),
+          'hex',
+        ).toString('utf8'),
+      ).to.match(/deposit disabled/i);
+
+      // Assert USDC was transferred to owner as failsafe
+      const ownerUsdcAfter = await usdc.balanceOf(ownerAddress);
+      expect(ownerUsdcAfter - ownerUsdcBefore).to.equal(
+        depositQuantityInAssetUnits,
+      );
+    });
   });
 
   describe('lzCompose with withdrawal payload', function () {
@@ -1232,6 +1283,94 @@ describe('KatanaPerpsStargateForwarder_v1', function () {
       // Assert USDC was transferred to destinationWallet (traderWallet) as failsafe
       const traderUsdcAfter = await usdc.balanceOf(traderWallet.address);
       expect(traderUsdcAfter - traderUsdcBefore).to.equal(
+        withdrawQuantityInAssetUnits,
+      );
+    });
+
+    it('should emit ForwardFailed and transfer vbUSDC to owner when vbUSDC redeem is disabled', async () => {
+      // Disable redeem on vbUSDC to trigger the redeem failure fallback
+      await vbUsdc.setRedeemDisabled(true);
+
+      const forwarderAddress = await forwarder.getAddress();
+      const exchangeLayerZeroAdapterAddress =
+        await stargatePoolMock.getAddress();
+
+      // Build withdrawal compose message with srcEid = katanaEndpointId
+      const withdrawalPayload = ethers.AbiCoder.defaultAbiCoder().encode(
+        ['uint8', 'tuple(uint32,address)'],
+        [
+          1, // ComposeMessageType.WithdrawFromKatana
+          [
+            ethereumEndpointId, // destinationEndpointId
+            traderWallet.address, // destinationWallet
+          ],
+        ],
+      );
+      const composeMessage = ethers.solidityPacked(
+        ['uint64', 'uint32', 'uint256', 'bytes'],
+        [
+          0, // Nonce
+          katanaEndpointId, // Source EID = katanaEndpointId for withdrawals
+          withdrawQuantityInAssetUnits, // Amount
+          ethers.solidityPacked(
+            ['bytes', 'bytes'],
+            [
+              // Compose from
+              ethers.AbiCoder.defaultAbiCoder().encode(
+                ['address'],
+                [exchangeLayerZeroAdapterAddress],
+              ),
+              // Compose message
+              withdrawalPayload,
+            ],
+          ),
+        ],
+      );
+
+      // Mint vbUSDC to the forwarder (simulating tokens arriving from Katana)
+      await usdc.approve(
+        await vbUsdc.getAddress(),
+        withdrawQuantityInAssetUnits,
+      );
+      await vbUsdc.deposit(withdrawQuantityInAssetUnits, forwarderAddress);
+
+      const ownerAddress = await forwarder.owner();
+      const ownerVbUsdcBefore = await vbUsdc.balanceOf(ownerAddress);
+      const startBlock = await ethers.provider.getBlockNumber();
+
+      // Call lzCompose - vbUSDC redeem will fail and trigger fallback
+      await stargatePoolMock.lzCompose(
+        forwarderAddress,
+        await vbUsdcOftAdapterMock.getAddress(), // from = vbUSDCOFTAdapter
+        ethers.randomBytes(32),
+        composeMessage,
+        await stargatePoolMock.getAddress(),
+        '0x',
+      );
+
+      // Assert ForwardFailed event was emitted
+      const forwardFailedEvents = await forwarder.queryFilter(
+        forwarder.filters.ForwardFailed(),
+        startBlock + 1,
+      );
+      expect(forwardFailedEvents).to.have.lengthOf(1);
+      expect(forwardFailedEvents[0].args.destinationWallet).to.equal(
+        ethers.ZeroAddress,
+      );
+      expect(forwardFailedEvents[0].args.quantity).to.equal(
+        withdrawQuantityInAssetUnits,
+      );
+      // Verify errorData encodes the expected error string "Redeem disabled"
+      expect(
+        Buffer.from(
+          forwardFailedEvents[0].args.errorData.substring(2),
+          'hex',
+        ).toString('utf8'),
+      ).to.match(/redeem disabled/i);
+
+      // Assert vbUSDC was transferred to owner as failsafe
+      const ownerVbUsdcAfter = await vbUsdc.balanceOf(ownerAddress);
+      expect(ownerVbUsdcAfter - ownerVbUsdcBefore).to.equal(
         withdrawQuantityInAssetUnits,
       );
     });

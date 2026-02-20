@@ -113,9 +113,10 @@ contract ExchangeLayerZeroAdapter_v1 is BridgeAdapterEvents, ILayerZeroComposer,
       addManagedAccountManagerWalletNativeDropQuantity_,
       depositToManagedAccountFeeQuantityInAssetUnits_,
       minimumAddManagedAccountDepositQuantityInAssetUnits_,
-      minimumDepositToManagedAccountQuantityInAssetUnits_,
-      minimumWithdrawQuantityMultiplier_
+      minimumDepositToManagedAccountQuantityInAssetUnits_
     );
+
+    setMinimumWithdrawQuantityMultiplier(minimumWithdrawQuantityMultiplier_);
 
     IERC20(quoteAsset).approve(exchange_, type(uint256).max);
     IERC20(quoteAsset).approve(oft_, type(uint256).max);
@@ -175,8 +176,7 @@ contract ExchangeLayerZeroAdapter_v1 is BridgeAdapterEvents, ILayerZeroComposer,
     uint64 addManagedAccountManagerWalletNativeDropQuantity_,
     uint64 depositToManagedAccountFeeQuantityInAssetUnits_,
     uint64 minimumAddManagedAccountDepositQuantityInAssetUnits_,
-    uint64 minimumDepositToManagedAccountQuantityInAssetUnits_,
-    uint64 minimumWithdrawQuantityMultiplier_
+    uint64 minimumDepositToManagedAccountQuantityInAssetUnits_
   ) public onlyOwner {
     // MA creation deposit fee should not exceed the deposit minimum as this may cause an underflow
     // when computing the net deposit. The fee can equal the minimum, in which case the MA creation
@@ -197,7 +197,6 @@ contract ExchangeLayerZeroAdapter_v1 is BridgeAdapterEvents, ILayerZeroComposer,
     depositToManagedAccountFeeQuantityInAssetUnits = depositToManagedAccountFeeQuantityInAssetUnits_;
     minimumAddManagedAccountDepositQuantityInAssetUnits = minimumAddManagedAccountDepositQuantityInAssetUnits_;
     minimumDepositToManagedAccountQuantityInAssetUnits = minimumDepositToManagedAccountQuantityInAssetUnits_;
-    minimumWithdrawQuantityMultiplier = minimumWithdrawQuantityMultiplier_;
   }
 
   /**
