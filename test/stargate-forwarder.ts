@@ -1454,6 +1454,14 @@ describe('KatanaPerpsStargateForwarder_v1', function () {
       const after = await ethers.provider.getBalance(traderWallet.address);
       expect(after - before).to.equal(amount);
     });
+
+    it('reverts when underfunded', async () => {
+      const amount = ethers.parseEther('1.0');
+
+      await expect(
+        forwarder.withdrawNativeAsset(traderWallet.address, amount),
+      ).to.be.revertedWith(/native asset transfer failed/i);
+    });
   });
 
   describe('loadEstimatedForwardedQuantityInAssetUnits', function () {
