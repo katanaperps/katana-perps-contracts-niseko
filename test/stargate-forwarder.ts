@@ -801,6 +801,70 @@ describe('KatanaPerpsStargateForwarder_v1', function () {
         depositQuantityInAssetUnits,
       );
     });
+
+    it('should emit ForwardFailed and transfer USDC to owner when destinationWallet is zero address', async () => {
+      // Build compose message with zero address as destinationWallet
+      const zeroAddressComposeMessage = buildComposeMessage(
+        depositQuantityInAssetUnits,
+        await stargatePoolMock.getAddress(),
+        ethers.AbiCoder.defaultAbiCoder().encode(
+          ['uint8', 'tuple(address,bytes)'],
+          [
+            0, // ComposeMessageType.DepositToKatana
+            [
+              ethers.ZeroAddress, // destinationWallet = zero address (invalid)
+              '0x', // exchangeLayerZeroAdapterPayload
+            ],
+          ],
+        ),
+      );
+
+      // Transfer USDC to the forwarder (simulating bridged tokens arriving)
+      await usdc.transfer(
+        await forwarder.getAddress(),
+        depositQuantityInAssetUnits,
+      );
+
+      const ownerAddress = await forwarder.owner();
+      const ownerUsdcBefore = await usdc.balanceOf(ownerAddress);
+      const startBlock = await ethers.provider.getBlockNumber();
+
+      // Call lzCompose - validation will fail due to zero address destinationWallet
+      await stargatePoolMock.lzCompose(
+        await forwarder.getAddress(),
+        await stargatePoolMock.getAddress(), // from = stargate
+        ethers.randomBytes(32),
+        zeroAddressComposeMessage,
+        await stargatePoolMock.getAddress(),
+        '0x',
+      );
+
+      // Assert ForwardFailed event was emitted
+      const forwardFailedEvents = await forwarder.queryFilter(
+        forwarder.filters.ForwardFailed(),
+        startBlock + 1,
+      );
+      expect(forwardFailedEvents).to.have.lengthOf(1);
+      expect(forwardFailedEvents[0].args.destinationWallet).to.equal(
+        ethers.ZeroAddress,
+      );
+      expect(forwardFailedEvents[0].args.quantity).to.equal(
+        depositQuantityInAssetUnits,
+      );
+      // Verify errorData encodes the expected error string "Invalid destination wallet"
+      expect(
+        Buffer.from(
+          forwardFailedEvents[0].args.errorData.substring(2),
+          'hex',
+        ).toString('utf8'),
+      ).to.match(/invalid destination wallet/i);
+
+      // Assert USDC was transferred to owner as failsafe
+      const ownerUsdcAfter = await usdc.balanceOf(ownerAddress);
+      expect(ownerUsdcAfter - ownerUsdcBefore).to.equal(
+        depositQuantityInAssetUnits,
+      );
+    });
   });
 
   describe('lzCompose with withdrawal payload', function () {
@@ -1367,6 +1431,91 @@ describe('KatanaPerpsStargateForwarder_v1', function () {
           'hex',
         ).toString('utf8'),
       ).to.match(/redeem disabled/i);
+
+      // Assert vbUSDC was transferred to owner as failsafe
+      const ownerVbUsdcAfter = await vbUsdc.balanceOf(ownerAddress);
+      expect(ownerVbUsdcAfter - ownerVbUsdcBefore).to.equal(
+        withdrawQuantityInAssetUnits,
+      );
+    });
+
+    it('should emit ForwardFailed and transfer vbUSDC to owner when destinationWallet is zero address', async () => {
+      const forwarderAddress = await forwarder.getAddress();
+      const exchangeLayerZeroAdapterAddress =
+        await stargatePoolMock.getAddress();
+
+      // Build withdrawal compose message with zero address as destinationWallet
+      const withdrawalPayload = ethers.AbiCoder.defaultAbiCoder().encode(
+        ['uint8', 'tuple(uint32,address)'],
+        [
+          1, // ComposeMessageType.WithdrawFromKatana
+          [
+            ethereumEndpointId, // destinationEndpointId
+            ethers.ZeroAddress, // destinationWallet = zero address (invalid)
+          ],
+        ],
+      );
+      const composeMessage = ethers.solidityPacked(
+        ['uint64', 'uint32', 'uint256', 'bytes'],
+        [
+          0, // Nonce
+          katanaEndpointId, // Source EID = katanaEndpointId for withdrawals
+          withdrawQuantityInAssetUnits, // Amount
+          ethers.solidityPacked(
+            ['bytes', 'bytes'],
+            [
+              // Compose from
+              ethers.AbiCoder.defaultAbiCoder().encode(
+                ['address'],
+                [exchangeLayerZeroAdapterAddress],
+              ),
+              // Compose message
+              withdrawalPayload,
+            ],
+          ),
+        ],
+      );
+
+      // Mint vbUSDC to the forwarder (simulating tokens arriving from Katana)
+      await usdc.approve(
+        await vbUsdc.getAddress(),
+        withdrawQuantityInAssetUnits,
+      );
+      await vbUsdc.deposit(withdrawQuantityInAssetUnits, forwarderAddress);
+
+      const ownerAddress = await forwarder.owner();
+      const ownerVbUsdcBefore = await vbUsdc.balanceOf(ownerAddress);
+      const startBlock = await ethers.provider.getBlockNumber();
+
+      // Call lzCompose - validation will fail due to zero address destinationWallet
+      await stargatePoolMock.lzCompose(
+        forwarderAddress,
+        await vbUsdcOftAdapterMock.getAddress(), // from = vbUSDCOFTAdapter
+        ethers.randomBytes(32),
+        composeMessage,
+        await stargatePoolMock.getAddress(),
+        '0x',
+      );
+
+      // Assert ForwardFailed event was emitted
+      const forwardFailedEvents = await forwarder.queryFilter(
+        forwarder.filters.ForwardFailed(),
+        startBlock + 1,
+      );
+      expect(forwardFailedEvents).to.have.lengthOf(1);
+      expect(forwardFailedEvents[0].args.destinationWallet).to.equal(
+        ethers.ZeroAddress,
+      );
+      expect(forwardFailedEvents[0].args.quantity).to.equal(
+        withdrawQuantityInAssetUnits,
+      );
+      // Verify errorData encodes the expected error string "Invalid destination wallet"
+      expect(
+        Buffer.from(
+          forwardFailedEvents[0].args.errorData.substring(2),
+          'hex',
+        ).toString('utf8'),
+      ).to.match(/invalid destination wallet/i);
 
       // Assert vbUSDC was transferred to owner as failsafe
       const ownerVbUsdcAfter = await vbUsdc.balanceOf(ownerAddress);
