@@ -893,7 +893,6 @@ describe('ExchangeLayerZeroAdapter_v1', function () {
             decimalToAssetUnits('0.50000000', quoteAssetDecimals),
             decimalToAssetUnits('1.00000000', quoteAssetDecimals),
             decimalToAssetUnits('1.00000000', quoteAssetDecimals),
-            decimalToPips('0.99900000'),
           ),
       ).to.be.revertedWithCustomError(
         bridgeAdapter,
@@ -910,7 +909,6 @@ describe('ExchangeLayerZeroAdapter_v1', function () {
           decimalToAssetUnits('0.50000000', quoteAssetDecimals),
           decimalToAssetUnits('1.00000000', quoteAssetDecimals),
           decimalToAssetUnits('1.00000000', quoteAssetDecimals),
-          decimalToPips('0.99900000'),
         ),
       ).to.be.revertedWith(/add ma deposit fee exceeds minimum/i);
     });
@@ -924,7 +922,6 @@ describe('ExchangeLayerZeroAdapter_v1', function () {
           decimalToAssetUnits('2.00000000', quoteAssetDecimals),
           decimalToAssetUnits('1.00000000', quoteAssetDecimals),
           decimalToAssetUnits('1.00000000', quoteAssetDecimals),
-          decimalToPips('0.99900000'),
         ),
       ).to.be.revertedWith(/deposit to ma fee must be less than minimum/i);
     });

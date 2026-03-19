@@ -208,8 +208,9 @@ contract KatanaPerpsStargateForwarder_v1 is ILayerZeroComposer, Ownable2Step {
   /**
    * @notice Allow Owner wallet to withdraw send fee funding
    */
-  function withdrawNativeAsset(address payable destinationWallet, uint256 quantity) public onlyOwner {
-    destinationWallet.transfer(quantity);
+  function withdrawNativeAsset(address payable destinationContractOrWallet, uint256 quantity) public onlyOwner {
+    (bool success, ) = destinationContractOrWallet.call{ value: quantity }("");
+    require(success, "Native asset transfer failed");
   }
 
   /**
