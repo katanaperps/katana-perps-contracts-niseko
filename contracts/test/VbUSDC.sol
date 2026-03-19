@@ -8,8 +8,9 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 // solhint-disable-next-line contract-name-capwords
 contract VbUSDC is ERC20 {
   address public asset;
-
   uint256 public redeemFee;
+  bool private _depositDisabled;
+  bool private _redeemDisabled;
 
   constructor(address asset_) ERC20("vbUSDC", "vbUSDC") {
     asset = asset_;
@@ -36,6 +37,10 @@ contract VbUSDC is ERC20 {
   // ERC-4626
 
   function deposit(uint256 assets, address receiver) public returns (uint256) {
+    if (_depositDisabled) {
+      revert("Deposit disabled");
+    }
+
     IERC20(asset).transferFrom(msg.sender, address(this), assets);
     _mint(receiver, assets);
 
@@ -43,6 +48,10 @@ contract VbUSDC is ERC20 {
   }
 
   function redeem(uint256 shares, address receiver, address owner) public returns (uint256) {
+    if (_redeemDisabled) {
+      revert("Redeem disabled");
+    }
+
     if (owner == _msgSender()) {
       _transfer(_msgSender(), address(this), shares);
     } else {
@@ -61,5 +70,13 @@ contract VbUSDC is ERC20 {
 
   function setRedeemFee(uint256 redeemFee_) public {
     redeemFee = redeemFee_;
+  }
+
+  function setDepositDisabled(bool depositDisabled) public {
+    _depositDisabled = depositDisabled;
+  }
+
+  function setRedeemDisabled(bool redeemDisabled) public {
+    _redeemDisabled = redeemDisabled;
   }
 }

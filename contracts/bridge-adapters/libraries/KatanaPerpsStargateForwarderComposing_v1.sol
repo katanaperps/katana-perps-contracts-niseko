@@ -79,6 +79,7 @@ library KatanaPerpsStargateForwarderComposing_v1 {
   function _forwardDeposit(ComposeArguments memory arguments, bytes memory composeMessage) private {
     (, DepositToKatana memory depositToKatana) = abi.decode(composeMessage, (ComposeMessageType, DepositToKatana));
     address destinationWallet = depositToKatana.destinationWallet;
+    require(destinationWallet != address(0x0), "Invalid destination wallet");
 
     // Total slippage is validated below by setting minAmountLD in SendParam
     uint256 minVbUsdcAmount = (arguments.amountLD * arguments.minimumForwardQuantityMultiplier) /
@@ -130,6 +131,7 @@ library KatanaPerpsStargateForwarderComposing_v1 {
       (ComposeMessageType, WithdrawFromKatana)
     );
     address destinationWallet = withdrawFromKatana.destinationWallet;
+    require(destinationWallet != address(0x0), "Invalid destination wallet");
 
     if (composeFrom != arguments.exchangeLayerZeroAdapter) {
       // Only the remote Bridge Adapter on Katana is allowed to compose withdrawals since this
@@ -153,8 +155,9 @@ library KatanaPerpsStargateForwarderComposing_v1 {
       return;
     }
 
-    // Redeem vbUSDC from vault and receive USDC
-    arguments.vbUSDC.redeem(arguments.amountLD, address(this), address(this));
+    // Redeem vbUSDC from vault and receive USDC. Per EIP-4626 previewRedeem MAY return less than
+    // redeem, so store the actual amount redeemed below
+    usdcAmount = arguments.vbUSDC.redeem(arguments.amountLD, address(this), address(this));
 
     // If the destination endpoint ID is Ethereum then a second hop is not required, transfer USDC
     // directly to destination wallet
