@@ -13,7 +13,7 @@ import type {
 } from '../typechain-types';
 import type { SignerWithAddress } from '@nomicfoundation/hardhat-ethers/signers';
 
-describe.only('ChainlinkDataStreamsIndexPriceAdapter', function () {
+describe('ChainlinkDataStreamsIndexPriceAdapter', function () {
   let ChainlinkDataStreamsIndexPriceAdapterFactory: ChainlinkDataStreamsIndexPriceAdapter__factory;
   let ChainlinkDataStreamsVerifierMockFactory: ChainlinkDataStreamsVerifierMock__factory;
   let ExchangeIndexPriceAdapterMockFactory: ExchangeIndexPriceAdapterMock__factory;
