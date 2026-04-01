@@ -4,7 +4,9 @@ import path from 'path';
 import { ethers } from 'ethers';
 
 import ChainlinkAggregator from './ChainlinkAggregator';
+import ChainlinkDataStreamsIndexAndOraclePriceAdapterContract from './ChainlinkDataStreamsIndexAndOraclePriceAdapterContract';
 import ChainlinkDataStreamsIndexPriceAdapterContract from './ChainlinkDataStreamsIndexPriceAdapterContract';
+import ChainlinkDataStreamsVerifierMockContract from './ChainlinkDataStreamsVerifierMockContract';
 import CustodianContract from './CustodianContract';
 import EarningsEscrowContract from './EarningsEscrow';
 import ExchangeLayerZeroAdapterV1Contract from './ExchangeLayerZeroAdapterV1Contract';
@@ -21,7 +23,9 @@ export {
   initRpcApi,
   loadProvider,
   ChainlinkAggregator,
+  ChainlinkDataStreamsIndexAndOraclePriceAdapterContract,
   ChainlinkDataStreamsIndexPriceAdapterContract,
+  ChainlinkDataStreamsVerifierMockContract,
   CustodianContract,
   EarningsEscrowContract,
   ExchangeLayerZeroAdapterV1Contract,
