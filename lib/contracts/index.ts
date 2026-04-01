@@ -17,11 +17,12 @@ import KatanaPerpsIndexAndOraclePriceAdapterContract from './KatanaPerpsIndexAnd
 import KatanaPerpsStargateForwarderV1Contract from './KatanaPerpsStargateForwarderV1Contract';
 import RedStoneIndexPriceAdapterContract from './RedStoneIndexPriceAdapterContract';
 import USDCContract from './USDCContract';
-import { initRpcApi, loadProvider } from './utils';
+import { initRpcApi, loadProvider, waitForDeployment } from './utils';
 
 export {
   initRpcApi,
   loadProvider,
+  waitForDeployment,
   ChainlinkAggregator,
   ChainlinkDataStreamsIndexAndOraclePriceAdapterContract,
   ChainlinkDataStreamsIndexPriceAdapterContract,
@@ -75,7 +76,7 @@ export async function deployLibrary(
     owner,
   ).deploy();
 
-  return (await library.waitForDeployment()).getAddress();
+  return (await waitForDeployment(library)).getAddress();
 }
 
 const libraryNameToBytecodeMap = new Map<

@@ -28,7 +28,9 @@ export default class GovernanceContract extends BaseContract<Governance> {
 
     const contract = await new Governance__factory(owner).deploy(...args);
 
-    return new this(await (await contract.waitForDeployment()).getAddress());
+    return new this(
+      await (await utils.waitForDeployment(contract)).getAddress(),
+    );
   }
 
   public getEthersContract(): Governance {
