@@ -65,10 +65,9 @@ function buildV3Payload(
       price + BigInt(1e16),
     ],
   );
-  const reportData = ethers.concat([new Uint8Array([0x00, 0x03]), encoded]);
   return ethers.AbiCoder.defaultAbiCoder().encode(
     ['bytes32[3]', 'bytes'],
-    [[ethers.ZeroHash, ethers.ZeroHash, ethers.ZeroHash], reportData],
+    [[ethers.ZeroHash, ethers.ZeroHash, ethers.ZeroHash], encoded],
   );
 }
 
@@ -101,10 +100,9 @@ function buildV8Payload(
       2,
     ],
   );
-  const reportData = ethers.concat([new Uint8Array([0x00, 0x08]), encoded]);
   return ethers.AbiCoder.defaultAbiCoder().encode(
     ['bytes32[3]', 'bytes'],
-    [[ethers.ZeroHash, ethers.ZeroHash, ethers.ZeroHash], reportData],
+    [[ethers.ZeroHash, ethers.ZeroHash, ethers.ZeroHash], encoded],
   );
 }
 
@@ -145,10 +143,9 @@ function buildV10Payload(
       tokenizedPrice, // tokenizedPrice
     ],
   );
-  const reportData = ethers.concat([new Uint8Array([0x00, 0x0a]), encoded]);
   return ethers.AbiCoder.defaultAbiCoder().encode(
     ['bytes32[3]', 'bytes'],
-    [[ethers.ZeroHash, ethers.ZeroHash, ethers.ZeroHash], reportData],
+    [[ethers.ZeroHash, ethers.ZeroHash, ethers.ZeroHash], encoded],
   );
 }
 
@@ -191,52 +188,9 @@ function buildV11Payload(
       2,
     ],
   );
-  const reportData = ethers.concat([new Uint8Array([0x00, 0x0b]), encoded]);
   return ethers.AbiCoder.defaultAbiCoder().encode(
     ['bytes32[3]', 'bytes'],
-    [[ethers.ZeroHash, ethers.ZeroHash, ethers.ZeroHash], reportData],
-  );
-}
-
-// Build a payload with a mismatched version prefix (prefix says V3 but feedId encodes V8)
-function buildMismatchedVersionPayload(
-  feedId: string,
-  versionByte: number,
-  price: bigint,
-): string {
-  const validFromTimestamp = Math.floor(Date.now() / 1000);
-  // Encode as V3 struct regardless of feedId version
-  const encoded = ethers.AbiCoder.defaultAbiCoder().encode(
-    [
-      'bytes32',
-      'uint32',
-      'uint32',
-      'uint192',
-      'uint192',
-      'uint32',
-      'int192',
-      'int192',
-      'int192',
-    ],
-    [
-      feedId,
-      validFromTimestamp,
-      validFromTimestamp,
-      0,
-      0,
-      validFromTimestamp + 3600,
-      price,
-      price,
-      price,
-    ],
-  );
-  const reportData = ethers.concat([
-    new Uint8Array([0x00, versionByte]),
-    encoded,
-  ]);
-  return ethers.AbiCoder.defaultAbiCoder().encode(
-    ['bytes32[3]', 'bytes'],
-    [[ethers.ZeroHash, ethers.ZeroHash, ethers.ZeroHash], reportData],
+    [[ethers.ZeroHash, ethers.ZeroHash, ethers.ZeroHash], encoded],
   );
 }
 
@@ -851,21 +805,6 @@ describe('ChainlinkDataStreamsIndexAndOraclePriceAdapter', function () {
       await expect(
         exchangeMock.validateIndexPricePayload(payload),
       ).to.eventually.be.rejectedWith(/unexpected non-positive price/i);
-    });
-
-    it('should revert for report version mismatch between payload and feed ID', async () => {
-      // Register a V8 feed but submit a V3 payload with the V8 feedId
-      const { exchangeMock } = await deployAdapterWithExchange(
-        [feedIdV8],
-        [baseAssetSymbol],
-        [18],
-      );
-      // Version prefix says V3 (0x03), but feedId starts with 0x0008
-      const payload = buildMismatchedVersionPayload(feedIdV8, 0x03, price18d);
-
-      await expect(
-        exchangeMock.validateIndexPricePayload(payload),
-      ).to.eventually.be.rejectedWith(/report version mismatch/i);
     });
 
     it('should revert when exchange is not set', async () => {

@@ -752,10 +752,6 @@ describe('ChainlinkDataStreamsIndexPriceAdapter', function () {
         ],
       );
 
-      // Construct the reportData: 2 bytes version prefix (version 3) + ReportV3 encoded
-      const versionPrefix = new Uint8Array([0x00, 0x03]);
-      const reportData = ethers.concat([versionPrefix, reportV3Encoded]);
-
       // Construct the full payload: empty bytes32[3] + reportData as bytes
       const emptyBytes32Array = [
         ethers.ZeroHash,
@@ -764,7 +760,7 @@ describe('ChainlinkDataStreamsIndexPriceAdapter', function () {
       ];
       const payload = ethers.AbiCoder.defaultAbiCoder().encode(
         ['bytes32[3]', 'bytes'],
-        [emptyBytes32Array, reportData],
+        [emptyBytes32Array, reportV3Encoded],
       );
 
       // Call validateIndexPricePayload through the mock exchange
@@ -796,6 +792,9 @@ describe('ChainlinkDataStreamsIndexPriceAdapter', function () {
     it('should revert when schema version is not 3', async () => {
       const feedId =
         '0x000362205e10b3a147d02792eccee483dca6c7b44ecce7012cb8c6e0b68b3ae9';
+      // Use a feedId starting with 0x0002 to trigger version rejection
+      const v2FeedId =
+        '0x000262205e10b3a147d02792eccee483dca6c7b44ecce7012cb8c6e0b68b3ae9';
       const decimals = 8;
       const priceMultiplier = 1;
       const priceInDecimals = BigInt(2000_00000000);
@@ -818,16 +817,7 @@ describe('ChainlinkDataStreamsIndexPriceAdapter', function () {
       );
       await indexPriceAdapter.setActive(await exchangeMock.getAddress());
 
-      // Construct ReportV3 struct values
       const validFromTimestamp = Math.floor(Date.now() / 1000);
-      const observationsTimestamp = validFromTimestamp;
-      const nativeFee = 0;
-      const linkFee = 0;
-      const expiresAt = validFromTimestamp + 3600;
-      const price = priceInDecimals;
-      const bid = priceInDecimals - BigInt(100000000);
-      const ask = priceInDecimals + BigInt(100000000);
-
       const reportV3Encoded = ethers.AbiCoder.defaultAbiCoder().encode(
         [
           'bytes32',
@@ -841,30 +831,21 @@ describe('ChainlinkDataStreamsIndexPriceAdapter', function () {
           'int192',
         ],
         [
-          feedId,
+          v2FeedId,
           validFromTimestamp,
-          observationsTimestamp,
-          nativeFee,
-          linkFee,
-          expiresAt,
-          price,
-          bid,
-          ask,
+          validFromTimestamp,
+          0,
+          0,
+          validFromTimestamp + 3600,
+          priceInDecimals,
+          priceInDecimals - BigInt(100000000),
+          priceInDecimals + BigInt(100000000),
         ],
       );
 
-      // Use version 2 instead of version 3
-      const versionPrefix = new Uint8Array([0x00, 0x02]);
-      const reportData = ethers.concat([versionPrefix, reportV3Encoded]);
-
-      const emptyBytes32Array = [
-        ethers.ZeroHash,
-        ethers.ZeroHash,
-        ethers.ZeroHash,
-      ];
       const payload = ethers.AbiCoder.defaultAbiCoder().encode(
         ['bytes32[3]', 'bytes'],
-        [emptyBytes32Array, reportData],
+        [[ethers.ZeroHash, ethers.ZeroHash, ethers.ZeroHash], reportV3Encoded],
       );
 
       await expect(
@@ -935,9 +916,6 @@ describe('ChainlinkDataStreamsIndexPriceAdapter', function () {
         ],
       );
 
-      const versionPrefix = new Uint8Array([0x00, 0x03]);
-      const reportData = ethers.concat([versionPrefix, reportV3Encoded]);
-
       const emptyBytes32Array = [
         ethers.ZeroHash,
         ethers.ZeroHash,
@@ -945,7 +923,7 @@ describe('ChainlinkDataStreamsIndexPriceAdapter', function () {
       ];
       const payload = ethers.AbiCoder.defaultAbiCoder().encode(
         ['bytes32[3]', 'bytes'],
-        [emptyBytes32Array, reportData],
+        [emptyBytes32Array, reportV3Encoded],
       );
 
       await expect(
@@ -1051,9 +1029,6 @@ describe('ChainlinkDataStreamsIndexPriceAdapter', function () {
         ],
       );
 
-      const versionPrefix = new Uint8Array([0x00, 0x03]);
-      const reportData = ethers.concat([versionPrefix, reportV3Encoded]);
-
       const emptyBytes32Array = [
         ethers.ZeroHash,
         ethers.ZeroHash,
@@ -1061,7 +1036,7 @@ describe('ChainlinkDataStreamsIndexPriceAdapter', function () {
       ];
       const payload = ethers.AbiCoder.defaultAbiCoder().encode(
         ['bytes32[3]', 'bytes'],
-        [emptyBytes32Array, reportData],
+        [emptyBytes32Array, reportV3Encoded],
       );
 
       await expect(

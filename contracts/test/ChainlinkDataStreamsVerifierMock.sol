@@ -11,12 +11,8 @@ contract ChainlinkDataStreamsVerifierMock is IVerifierProxy {
     bytes calldata payload,
     bytes calldata /* parameterPayload */
   ) external payable returns (bytes memory) {
-    (, bytes memory verifierResponseWithVersionPrefix) = abi.decode(payload, (bytes32[3], bytes));
-    return this.sliceLeadingTwoBytes(verifierResponseWithVersionPrefix);
-  }
-
-  function sliceLeadingTwoBytes(bytes calldata payload) external pure returns (bytes memory) {
-    return payload[2:];
+    (, bytes memory reportData) = abi.decode(payload, (bytes32[3], bytes));
+    return reportData;
   }
 
   function setFeeManager(address newFeeManager) external {
