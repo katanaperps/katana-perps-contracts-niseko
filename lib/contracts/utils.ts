@@ -28,3 +28,31 @@ export function loadProvider(): ethers.JsonRpcProvider {
   }
   return provider;
 }
+
+/**
+ * Wrapper around ethers `waitForDeployment` that retries with exponential
+ * backoff on "transaction not found" errors. Load-balanced RPCs may not
+ * propagate a newly-broadcast transaction to every read replica immediately,
+ * so the first few look-ups can fail transiently.
+ */
+export async function waitForDeployment<T extends ethers.BaseContract>(
+  contract: T,
+  maxRetries = 5,
+  baseDelayMs = 1000,
+): Promise<T> {
+  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+    try {
+      return await contract.waitForDeployment();
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      const isTransient = message.includes('transaction not found');
+      if (!isTransient || attempt === maxRetries) {
+        throw error;
+      }
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, baseDelayMs * 2 ** attempt);
+      });
+    }
+  }
+  throw new Error('waitForDeployment: max retries exceeded');
+}

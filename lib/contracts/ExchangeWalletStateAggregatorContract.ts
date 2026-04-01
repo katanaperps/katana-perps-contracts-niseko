@@ -33,7 +33,9 @@ export default class ExchangeWalletStateAggregatorContract extends BaseContract<
       owner,
     ).deploy(...args);
 
-    return new this(await (await contract.waitForDeployment()).getAddress());
+    return new this(
+      await (await utils.waitForDeployment(contract)).getAddress(),
+    );
   }
 
   public getEthersContract(): ExchangeWalletStateAggregator {

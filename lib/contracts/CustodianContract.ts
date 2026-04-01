@@ -28,7 +28,9 @@ export default class CustodianContract extends BaseContract<Custodian> {
 
     const contract = await new Custodian__factory(owner).deploy(...args);
 
-    return new this(await (await contract.waitForDeployment()).getAddress());
+    return new this(
+      await (await utils.waitForDeployment(contract)).getAddress(),
+    );
   }
 
   public getEthersContract(): Custodian {

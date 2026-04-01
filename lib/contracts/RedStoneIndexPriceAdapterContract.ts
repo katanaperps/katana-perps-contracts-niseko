@@ -32,7 +32,9 @@ export default class RedStoneIndexPriceAdapterContract extends BaseContract<RedS
       ...args,
     );
 
-    return new this(await (await contract.waitForDeployment()).getAddress());
+    return new this(
+      await (await utils.waitForDeployment(contract)).getAddress(),
+    );
   }
 
   public getEthersContract(): RedStoneIndexPriceAdapter {
