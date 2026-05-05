@@ -28,7 +28,9 @@ export default class USDCContract extends BaseContract<USDC> {
 
     const contract = await new USDC__factory(owner).deploy(...args);
 
-    return new this(await (await contract.waitForDeployment()).getAddress());
+    return new this(
+      await (await utils.waitForDeployment(contract)).getAddress(),
+    );
   }
 
   public getEthersContract(): USDC {

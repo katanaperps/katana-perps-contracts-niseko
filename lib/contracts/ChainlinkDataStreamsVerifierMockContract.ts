@@ -1,14 +1,16 @@
 import { ethers } from 'ethers';
 
-import * as utils from './utils';
+import { ChainlinkDataStreamsVerifierMock__factory } from '../../typechain-types';
+
 import BaseContract from './BaseContract';
+import * as utils from './utils';
 
-import { Governance, Governance__factory } from '../../typechain-types';
+import type { ChainlinkDataStreamsVerifierMock } from '../../typechain-types';
 
-export default class GovernanceContract extends BaseContract<Governance> {
+export default class ChainlinkDataStreamsVerifierMockContract extends BaseContract<ChainlinkDataStreamsVerifierMock> {
   public constructor(address: string, signerWalletPrivateKey?: string) {
     super(
-      Governance__factory.connect(
+      ChainlinkDataStreamsVerifierMock__factory.connect(
         address,
         signerWalletPrivateKey
           ? new ethers.Wallet(signerWalletPrivateKey, utils.loadProvider())
@@ -18,22 +20,22 @@ export default class GovernanceContract extends BaseContract<Governance> {
   }
 
   public static async deploy(
-    args: Parameters<Governance__factory['deploy']>,
     ownerWalletPrivateKey: string,
-  ): Promise<GovernanceContract> {
+  ): Promise<ChainlinkDataStreamsVerifierMockContract> {
     const owner = new ethers.Wallet(
       ownerWalletPrivateKey,
       utils.loadProvider(),
     );
 
-    const contract = await new Governance__factory(owner).deploy(...args);
+    const contract =
+      await new ChainlinkDataStreamsVerifierMock__factory(owner).deploy();
 
     return new this(
       await (await utils.waitForDeployment(contract)).getAddress(),
     );
   }
 
-  public getEthersContract(): Governance {
+  public getEthersContract(): ChainlinkDataStreamsVerifierMock {
     return this.contract;
   }
 }

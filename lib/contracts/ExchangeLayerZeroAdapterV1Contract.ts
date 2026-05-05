@@ -42,7 +42,9 @@ export default class ExchangeLayerZeroAdapterV1Contract extends BaseContract<Exc
       owner,
     ).deploy(...args);
 
-    return new this(await (await contract.waitForDeployment()).getAddress());
+    return new this(
+      await (await utils.waitForDeployment(contract)).getAddress(),
+    );
   }
 
   public getEthersContract(): ExchangeLayerZeroAdapter_v1 {

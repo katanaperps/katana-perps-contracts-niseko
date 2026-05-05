@@ -28,7 +28,9 @@ export default class EarningsEscrowContract extends BaseContract<EarningsEscrow>
 
     const contract = await new EarningsEscrow__factory(owner).deploy(...args);
 
-    return new this(await (await contract.waitForDeployment()).getAddress());
+    return new this(
+      await (await utils.waitForDeployment(contract)).getAddress(),
+    );
   }
 
   public getEthersContract(): EarningsEscrow {
