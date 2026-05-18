@@ -5,7 +5,10 @@
   "homepage": "https://github.com/katanaperps/katana-perps-contracts-niseko",
   "repository": "https://github.com/katanaperps/katana-perps-contracts-niseko",
   "license": "MIT",
-  "packageManager": "yarn@4.2.1",
+  "packageManager": "yarn@4.14.1",
+  "engines": {
+    "node": ">=20.11.0"
+  },
   "main": "build/lib/index.js",
   "types": "build/lib/index.d.ts",
   "directories": {
@@ -44,7 +47,7 @@
     "test:coverage": "COVERAGE=1 hardhat coverage",
     "lint:sol": "solhint 'contracts/**/*.sol'",
     "lint:sol:cache": "solhint --cache 'contracts/**/*.sol'",
-    "postinstall": "yarn setup:git:hooks",
+    "prepare": "yarn setup:git:hooks",
     "setup:git:hooks": "git config --local core.hooksPath .githooks || echo 'Not a git repository, did not set up git hooks'",
     "test": "COVERAGE=1 hardhat test"
   },
@@ -94,7 +97,7 @@
     "eslint-config-airbnb-base": "^15.0.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-config-standard": "^17.1.0",
-    "eslint-plugin-import": "npm:eslint-plugin-i@latest",
+    "eslint-plugin-import": "^2.32.0",
     "eslint-plugin-jsx-a11y": "6.8.0",
     "eslint-plugin-node": "^11.1.0",
     "eslint-plugin-prettier": "^5.1.3",
@@ -114,5 +117,13 @@
     "typechain": "8.3.2",
     "typescript": "^5.5.4",
     "typescript-eslint": "^7.1.1"
+  },
+  "dependenciesMeta": {
+    "keccak": {
+      "built": true
+    },
+    "secp256k1": {
+      "built": true
+    }
   }
 }
